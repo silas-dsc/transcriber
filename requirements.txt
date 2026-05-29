@@ -1,0 +1,15 @@
+# Core runtime dependencies (the pipeline runs end-to-end with just these,
+# using the librosa HPSS + pYIN fallbacks).
+numpy>=1.22
+scipy>=1.8
+librosa>=0.10
+soundfile>=0.12
+music21>=9.1
+pretty_midi>=0.2.10
+
+# For the high-quality ML back-ends (Demucs separation, Spotify basic-pitch
+# polyphonic transcription) install the optional extras instead:
+#
+#     pip install -e ".[full]"
+#
+# which adds: demucs, basic-pitch, torch

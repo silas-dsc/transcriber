@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transcriber"
+version = "0.1.0"
+description = "Transcribe an audio recording into a MusicXML score: stem separation, rhythm/pitch analysis, MusicXML export."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "transcriber contributors" }]
+keywords = ["music", "transcription", "musicxml", "audio", "stem-separation", "demucs", "basic-pitch"]
+
+# Core dependencies: everything needed to run the pipeline end-to-end using
+# the built-in librosa fallbacks (HPSS separation + pYIN pitch tracking).
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.8",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "music21>=9.1",
+    "pretty_midi>=0.2.10",
+]
+
+[project.optional-dependencies]
+# High-quality machine-learning back-ends. These pull in torch / tensorflow
+# and are large, hence kept optional.
+full = [
+    "demucs>=4.0",
+    "basic-pitch>=0.3",
+    "torch>=2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+transcriber = "transcriber.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/silas-dsc/transcriber"
+
+[tool.setuptools.packages.find]
+include = ["transcriber*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
