@@ -37,10 +37,31 @@ other compressed formats).
 ```bash
 # Core install — runs end-to-end with the librosa fallbacks.
 pip install -e .
-
-# Optional: high-quality ML back-ends (Demucs + basic-pitch + torch).
-pip install -e ".[full]"
 ```
+
+### High-quality ML back-ends (Demucs + basic-pitch)
+
+Use the helper script — it works on **all platforms including Apple Silicon
+and Python 3.12+**:
+
+```bash
+bash scripts/install_ml.sh          # Demucs + basic-pitch (ONNX runtime)
+```
+
+> **Why a script?** `basic-pitch`'s packaging pins `tensorflow-macos`, which
+> has no wheels on macOS + Python > 3.11, so a plain `pip install ".[full]"`
+> fails to resolve there. The script installs basic-pitch with its bundled
+> **ONNX** model + `onnxruntime` instead, avoiding TensorFlow entirely.
+
+On Linux/Windows (or macOS with Python ≤ 3.11) the pip extras also work:
+
+```bash
+pip install -e ".[full]"            # or ".[separation]" / ".[pitch]"
+```
+
+basic-pitch auto-selects whatever runtime is installed (TensorFlow, CoreML,
+TFLite or ONNX), so the code needs no changes either way. If no ML back-end is
+present, the pipeline transparently falls back to the librosa implementations.
 
 ## Usage
 

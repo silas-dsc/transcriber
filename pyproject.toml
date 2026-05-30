@@ -24,12 +24,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# High-quality machine-learning back-ends. These pull in torch / tensorflow
-# and are large, hence kept optional.
+# High-quality machine-learning back-ends, split so each can be installed on
+# its own.  NOTE for macOS + Python > 3.11: basic-pitch's metadata pins
+# tensorflow-macos, which has no wheels there, so `pip install ".[pitch]"`
+# fails.  Use `scripts/install_ml.sh` (or the ONNX install in the README),
+# which installs basic-pitch with the ONNX back-end and avoids tensorflow.
+separation = [
+    "demucs>=4.0",
+    "torch>=2.0",
+]
+pitch = [
+    "basic-pitch>=0.3",
+    "onnxruntime>=1.15",
+]
 full = [
     "demucs>=4.0",
-    "basic-pitch>=0.3",
     "torch>=2.0",
+    "basic-pitch>=0.3",
+    "onnxruntime>=1.15",
 ]
 # Browser-based web interface (upload audio -> download MusicXML).
 web = [

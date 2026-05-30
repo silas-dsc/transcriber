@@ -70,9 +70,32 @@ def transcribe_pitch(
 
 
 def _basic_pitch_available() -> bool:
+    """True only if basic-pitch is installed *and* has a usable runtime.
+
+    basic-pitch supports several inference back-ends (TensorFlow, CoreML,
+    TFLite, ONNX) and picks whichever is importable.  If none is present its
+    package import itself raises, so we probe by importing and confirming at
+    least one back-end flag is set.  This lets ``auto`` fall back to pYIN
+    instead of crashing on a half-installed basic-pitch.
+    """
     import importlib.util
 
-    return importlib.util.find_spec("basic_pitch") is not None
+    if importlib.util.find_spec("basic_pitch") is None:
+        return False
+    try:
+        import basic_pitch
+
+        return any(
+            getattr(basic_pitch, flag, False)
+            for flag in ("TF_PRESENT", "CT_PRESENT", "TFLITE_PRESENT", "ONNX_PRESENT")
+        )
+    except Exception:
+        logger.warning(
+            "basic-pitch is installed but has no usable inference back-end "
+            "(install one of: onnxruntime, coremltools, tensorflow). "
+            "Falling back to pYIN."
+        )
+        return False
 
 
 def _transcribe_basic_pitch(samples: np.ndarray, sr: int) -> list[Note]:
