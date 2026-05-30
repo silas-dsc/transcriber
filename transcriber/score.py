@@ -90,7 +90,24 @@ def build_score(
         score.insert(0, empty)
 
     score.makeNotation(inPlace=True)
+    _fix_voice_numbers(score)
     return score
+
+
+def _fix_voice_numbers(score: stream.Score) -> None:
+    """Renumber voices so every ``<voice>`` is a positive integer.
+
+    When transcribed notes overlap, music21's ``makeNotation`` splits them into
+    :class:`~music21.stream.Voice` objects whose ids are **0-based integers**.
+    Those are exported verbatim as ``<voice>0</voice>``, which MuseScore 4
+    rejects as a corrupt file.  We renumber the voices in each measure to start
+    at 1, matching the MusicXML convention.
+    """
+    for part in score.parts:
+        for measure in part.getElementsByClass(stream.Measure):
+            voices = list(measure.getElementsByClass(stream.Voice))
+            for i, voice in enumerate(voices, start=1):
+                voice.id = str(i)
 
 
 def _metadata(title: str):
@@ -155,6 +172,8 @@ def _build_drum_part(
         u.quarterLength = 0.5  # notate strokes as eighth notes by default
         u.volume.velocity = int(hit.velocity)
         u.stemDirection = "up" if hit.kind == HIHAT else "down"
+        if hit.kind == HIHAT:
+            u.notehead = "x"  # conventional cymbal/hi-hat notehead
         part.insert(offset_ql, u)
         placed += 1
 

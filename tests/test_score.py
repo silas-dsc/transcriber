@@ -48,6 +48,29 @@ def test_empty_input_still_produces_valid_score():
     assert len(score.parts) >= 1
 
 
+def test_overlapping_notes_have_valid_voice_numbers(tmp_path):
+    """Overlapping notes must not export <voice>0</voice> (MuseScore rejects it)."""
+    import re
+
+    rhythm = _rhythm()
+    # Heavily overlapping notes force music21 to create multiple voices.
+    notes = [
+        Note(start=0.0, end=2.0, pitch=60),
+        Note(start=0.5, end=2.0, pitch=64),
+        Note(start=1.0, end=2.0, pitch=67),
+        Note(start=1.5, end=2.0, pitch=72),
+    ]
+    score = build_score(rhythm, {"other": notes})
+    out = tmp_path / "voices.musicxml"
+    write_musicxml(score, str(out))
+    text = out.read_text()
+
+    voices = {int(v) for v in re.findall(r"<voice>(\d+)</voice>", text)}
+    assert voices, "expected explicit voices for overlapping notes"
+    assert min(voices) >= 1, f"found invalid voice number(s): {sorted(voices)}"
+    assert "<voice>0</voice>" not in text
+
+
 def test_musicxml_is_well_formed_and_reparseable(tmp_path):
     rhythm = _rhythm()
     notes = [Note(start=i * 0.5, end=i * 0.5 + 0.45, pitch=60 + i) for i in range(8)]
