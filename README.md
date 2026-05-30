@@ -74,6 +74,20 @@ print(result.rhythm.tempo, result.stem_names)
 score = result.score          # a music21 Score you can manipulate further
 ```
 
+### Web interface
+
+A small browser app (upload audio → download MusicXML) is included:
+
+```bash
+pip install -e ".[web]"     # adds fastapi + uvicorn
+
+transcriber-web             # auto-selects a free port and prints the URL
+transcriber-web --port 8000  # or pick your own port
+```
+
+Then open the printed `http://127.0.0.1:<port>` URL, choose a file and the
+back-ends, and the score downloads when it's ready.
+
 ### Try the bundled demo
 
 ```bash
@@ -92,6 +106,7 @@ transcriber/
   score.py        # music21 score assembly + MusicXML export
   pipeline.py     # orchestration
   cli.py          # command-line interface
+  web.py          # FastAPI browser upload UI
 tests/            # pytest suite (runs on the core deps only)
 examples/         # bundled synthetic demo recording
 ```
