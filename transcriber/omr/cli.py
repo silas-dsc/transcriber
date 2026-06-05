@@ -70,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cross-check the result with Claude (needs the 'llm' extra + API key).",
     )
     parser.add_argument(
+        "--mark-review",
+        action="store_true",
+        help="Annotate the output MusicXML with 'review?' marks on uncertain measures.",
+    )
+    parser.add_argument(
         "--list-engines",
         action="store_true",
         help="List the OMR engines available in this environment and exit.",
@@ -113,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         semantic_check=not args.no_semantic,
         semantic_aggressive=args.aggressive,
         llm_review=args.llm_review,
+        mark_review=args.mark_review,
     )
 
     result = recognize(args.input, output, config=config)
@@ -124,11 +130,13 @@ def main(argv: list[str] | None = None) -> int:
         ranked = sorted(result.engine_confidences.items(), key=lambda kv: -kv[1])
         print("Ensemble:   " + ", ".join(f"{n}={c:.2f}" for n, c in ranked))
     if result.semantic_report is not None:
-        report = result.semantic_report
-        print(f"Semantic:   {report.summary()}")
-        for issue in report.issues:
-            if not issue.fixed:
-                print(f"  [{issue.severity}] {issue.message}")
+        print(f"Semantic:   {result.semantic_report.summary()}")
+    if result.confidence_report is not None:
+        cr = result.confidence_report
+        print(f"Review:     {cr.summary()}")
+        for item in cr.review_items[:10]:
+            loc = f"part {item.part}" + (f", m.{item.measure}" if item.measure is not None else "")
+            print(f"  [{item.confidence:.2f}] {loc}: {'; '.join(item.reasons)}")
     print(f"MusicXML written to: {result.output_path}")
     return 0
 

@@ -602,11 +602,36 @@ def _heads_to_notes(
                 voice=1,
                 staff=head.staff_index + 1,
                 accidental=accidental,
+                confidence=_pitch_confidence(head.y, staff),
             )
         )
         onset_by_staff[head.staff_index] = onset + duration
 
     return notes
+
+
+# Head centroids carry a small (stem-direction-dependent) bias of up to ~0.3
+# steps that does not change the rounded pitch.  Treat anything within this
+# dead zone of a step as fully confident; only heads genuinely straddling the
+# boundary between two steps are flagged.
+_CONF_DEAD_ZONE = 0.3
+
+
+def _pitch_confidence(y: float, staff: StaffSystem) -> float:
+    """How unambiguous a head's pitch is, from how centred it is on a step.
+
+    A head sitting on or near a step is unambiguous (1.0); one straddling the
+    boundary between two steps could round either way (->0.0).  This is the
+    recogniser's honest self-doubt signal, used to flag notes for human review.
+    """
+    half = staff.staff_space / 2.0
+    if half <= 0:
+        return 1.0
+    frac = ((staff.bottom_line_y - y) / half) % 1.0
+    dist_to_step = min(frac, 1.0 - frac)  # 0 on a step .. 0.5 between two steps
+    if dist_to_step <= _CONF_DEAD_ZONE:
+        return 1.0
+    return float(max(0.0, 1.0 - (dist_to_step - _CONF_DEAD_ZONE) / (0.5 - _CONF_DEAD_ZONE)))
 
 
 def _step_to_pitch(step: int, clef: str) -> tuple[int, str]:

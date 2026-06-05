@@ -16,6 +16,7 @@ from PIL import Image
 from music21 import stream
 
 from . import engines as engines_mod
+from .confidence import ConfidenceReport, annotate_review, build_confidence
 from .ensemble import recognize_ensemble
 from .postprocess import repair_score, score_confidence
 from .primitive import PrimitiveConfig
@@ -46,6 +47,10 @@ class OMRConfig:
             validated, conservative corrections (octave / duration / duplicate).
             Off by default; requires the ``anthropic`` package and an API key.
         llm_model: Claude model id used when ``llm_review`` is enabled.
+        review: Compute a confidence report + human-review queue (fuses per-note
+            confidence, semantic checks and multi-engine disagreement).
+        review_threshold: Measures below this confidence are flagged for review.
+        mark_review: Annotate the output MusicXML with review markers/colours.
     """
 
     engine: str = "auto"
@@ -58,6 +63,9 @@ class OMRConfig:
     semantic_aggressive: bool = False
     llm_review: bool = False
     llm_model: str = "claude-opus-4-8"
+    review: bool = True
+    review_threshold: float = 0.85
+    mark_review: bool = False
 
 
 @dataclass
@@ -72,6 +80,7 @@ class OMRResult:
         confidence: Confidence of the selected result in ``[0, 1]``.
         engine_confidences: Per-engine confidence (populated for ensembles).
         semantic_report: Musical sanity-check report, if semantic checks ran.
+        confidence_report: Per-measure confidence + human-review queue.
     """
 
     score: stream.Score
@@ -81,6 +90,7 @@ class OMRResult:
     confidence: float
     engine_confidences: dict[str, float] = field(default_factory=dict)
     semantic_report: SemanticReport | None = None
+    confidence_report: ConfidenceReport | None = None
 
 
 def recognize(
@@ -115,6 +125,7 @@ def recognize(
         workdir = Path(tmp)
         page_paths = _write_page_pngs(pages, workdir)
 
+        other_engine_scores: dict[str, stream.Score] = {}
         if config.engine == "ensemble":
             available = [engines_mod.get_engine(n) for n in engines_mod.available_engines()]
             score, engine_name, outcomes = recognize_ensemble(
@@ -122,6 +133,9 @@ def recognize(
             )
             engine_confidences = {o.name: o.confidence for o in outcomes}
             confidence = engine_confidences.get(engine_name, 0.0)
+            other_engine_scores = {
+                o.name: o.score for o in outcomes if o.name != engine_name and o.score is not None
+            }
         else:
             engine = engines_mod.get_engine(config.engine)
             score = engine.recognize(page_paths, pages, workdir, **kwargs)
@@ -148,6 +162,17 @@ def recognize(
             model=config.llm_model,
         )
 
+    confidence_report = None
+    if config.review:
+        # Include the final score (as the primary) plus the other engines' raw
+        # transcriptions, so disagreement is measured against the returned score.
+        engine_scores = {**other_engine_scores, engine_name: score}
+        confidence_report = build_confidence(
+            score, semantic_report, engine_scores, review_threshold=config.review_threshold
+        )
+        if config.mark_review:
+            annotate_review(score, confidence_report)
+
     written: str | None = None
     if output_path is not None:
         written = str(score.write("musicxml", fp=str(output_path)))
@@ -161,6 +186,7 @@ def recognize(
         confidence=confidence,
         engine_confidences=engine_confidences,
         semantic_report=semantic_report,
+        confidence_report=confidence_report,
     )
 
 

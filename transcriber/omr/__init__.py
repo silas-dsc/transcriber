@@ -37,6 +37,7 @@ fetchers, so the system can be measured and refined against real
 PDF/MusicXML corpora.
 """
 
+from .confidence import ConfidenceReport, ReviewItem
 from .pipeline import OMRConfig, OMRResult, recognize
 from .types import OMRNote, RecognizedScore, StaffSystem
 
@@ -47,4 +48,6 @@ __all__ = [
     "OMRNote",
     "RecognizedScore",
     "StaffSystem",
+    "ConfidenceReport",
+    "ReviewItem",
 ]

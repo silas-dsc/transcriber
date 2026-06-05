@@ -185,6 +185,31 @@ post-processing layers exploit that:
   flag and fix, but never invent notes. Requires `pip install -e ".[llm]"` and
   `ANTHROPIC_API_KEY`.
 
+### Confidence and human-in-the-loop review
+
+No OMR system is perfect on real scans, so the honest route to a *correct*
+score is to make the system **know where it is unsure** and surface only those
+spots for a human to confirm. The pipeline fuses three independent confidence
+signals (`confidence.py`) into a per-measure score and a ranked **review
+queue** (`OMRResult.confidence_report`):
+
+1. **Per-note recogniser confidence** — e.g. the built-in recogniser's
+   head-position ambiguity (a head straddling two staff steps).
+2. **Semantic checks** — the musical impossibilities from `semantic.py`.
+3. **Multi-engine disagreement** — where oemer / homr / the built-in recogniser
+   disagree on a note is exactly where to look. (Catches systematic errors the
+   geometric signal misses, e.g. a skew-induced pitch shift.)
+
+```bash
+omr scan.pdf -o out.musicxml --mark-review   # annotate uncertain measures
+```
+
+`--mark-review` writes a MusicXML with a red `review?` mark on each flagged
+measure and its low-confidence notes coloured, so it opens in any editor with
+the spots to check already highlighted. On clean music the queue is empty; the
+worse the input, the more it surfaces — which is how a human reaches a truly
+correct score with minimal effort.
+
 ### Install
 
 ```bash

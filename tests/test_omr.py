@@ -219,6 +219,60 @@ def test_inline_natural_cancels_key_signature():
 
 
 # --------------------------------------------------------------------------- #
+# Confidence & human-in-the-loop review (Target 2)
+# --------------------------------------------------------------------------- #
+def test_clean_score_has_high_confidence_and_no_review(tmp_path):
+    image = render_reference(make_phrase(C_MAJOR_SCALE), tmp_path / "clean.png")
+    result = recognize(image, None, OMRConfig(engine="primitive"))
+    assert result.confidence_report is not None
+    assert result.confidence_report.overall >= 0.9
+    assert result.confidence_report.n_review == 0
+
+
+def test_degraded_score_is_flagged_for_review(tmp_path):
+    from PIL import Image
+    from transcriber.omr.eval.augment import augment_preset
+
+    clean = render_reference_array(make_phrase(C_MAJOR_SCALE))
+    degraded = augment_preset(clean, "blur")
+    path = tmp_path / "blur.png"
+    Image.fromarray((degraded * 255).clip(0, 255).astype("uint8")).save(path)
+    result = recognize(path, None, OMRConfig(engine="primitive"))
+    # A blurred page is uncertain -> at least one measure should be queued.
+    assert result.confidence_report.n_review >= 1
+
+
+def test_multi_engine_disagreement_flags_contested_notes():
+    from transcriber.omr.confidence import build_confidence
+
+    primary = make_phrase([60, 62, 64, 65])
+    primary.makeNotation(inPlace=True)
+    agree = make_phrase([60, 62, 64, 65])
+    agree.makeNotation(inPlace=True)
+    disagree = make_phrase([60, 62, 99, 65])  # differs on the 3rd note
+    disagree.makeNotation(inPlace=True)
+
+    report = build_confidence(
+        primary, None, {"primitive": primary, "oemer": disagree, "homr": agree}
+    )
+    assert report.n_review >= 1
+    assert any("disagree" in r for item in report.review_items for r in item.reasons)
+
+
+def test_annotate_review_marks_flagged_measures(tmp_path):
+    from PIL import Image
+    from music21 import expressions
+    from transcriber.omr.eval.augment import augment_preset
+
+    degraded = augment_preset(render_reference_array(make_phrase(C_MAJOR_SCALE)), "blur")
+    path = tmp_path / "blur.png"
+    Image.fromarray((degraded * 255).clip(0, 255).astype("uint8")).save(path)
+    result = recognize(path, None, OMRConfig(engine="primitive", mark_review=True))
+    marks = list(result.score.recurse().getElementsByClass(expressions.TextExpression))
+    assert any(m.content == "review?" for m in marks)
+
+
+# --------------------------------------------------------------------------- #
 # Metrics
 # --------------------------------------------------------------------------- #
 def test_identical_scores_score_perfectly():

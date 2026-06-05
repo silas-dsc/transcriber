@@ -90,6 +90,8 @@ def _build_part(
         m21.quarterLength = float(n.duration)
         if n.accidental:
             m21.pitch.accidental = n.accidental
+        # Carry the recogniser's per-note confidence for the review pass.
+        m21.omr_confidence = float(n.confidence)
         part.insert(float(n.onset), m21)
         placed += 1
 
