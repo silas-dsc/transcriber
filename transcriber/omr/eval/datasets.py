@@ -114,15 +114,35 @@ def music21_corpus(query: str = "bach", limit: int = 8) -> list[CorpusItem]:
     """
     from music21 import corpus
 
-    paths = corpus.getComposer(query) or corpus.search(query).search(query)
+    # getComposer indexes the well-known composers; for bundled *collections*
+    # (ryansMammoth, essenFolksong, oneills1850, ...) fall back to matching the
+    # query against the core corpus paths.
+    paths = corpus.getComposer(query)
+    if not paths:
+        q = query.lower()
+        paths = [p for p in corpus.getCorePaths() if q in str(p).lower()]
+
     items: list[CorpusItem] = []
-    for path in list(paths)[:limit]:
+    for path in paths:
+        if len(items) >= limit:
+            break
         try:
             parsed = corpus.parse(path)
         except Exception as exc:  # pragma: no cover - corpus parse edge cases
             logger.warning("Skipping %s: %s", path, exc)
             continue
-        items.append(CorpusItem(id=Path(str(path)).stem, score=monophonic_top_line(parsed)))
+        stem = Path(str(path)).stem
+        # An ".abc" file can be an Opus holding several tunes; expand it.
+        scores = list(parsed.scores) if isinstance(parsed, stream.Opus) else [parsed]
+        for i, sc in enumerate(scores):
+            if len(items) >= limit:
+                break
+            try:
+                mono = monophonic_top_line(sc)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Skipping %s[%d]: %s", stem, i, exc)
+                continue
+            items.append(CorpusItem(id=f"{stem}_{i}" if len(scores) > 1 else stem, score=mono))
     return items
 
 

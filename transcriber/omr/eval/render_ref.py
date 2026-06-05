@@ -98,8 +98,13 @@ def _diatonic_step(pitch) -> int:
 def _render_builtin(score: stream.Score, out_path: Path) -> Path:
     from PIL import Image, ImageDraw
 
-    notes = list(score.flatten().notes)
-    # Expand chords to their lowest pitch for the monophonic engraver.
+    # Lay notes out in the same (onset, pitch) order the metric flattens them
+    # in, so simultaneous notes (grace notes, ornaments, chord reductions) are
+    # read back in a consistent order rather than registering as swaps.
+    notes = sorted(
+        score.flatten().notes,
+        key=lambda n: (float(n.offset), (n.pitches[0] if n.isChord else n.pitch).midi),
+    )
     events = []
     for n in notes:
         pitch = n.pitches[0] if n.isChord else n.pitch
