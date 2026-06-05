@@ -21,6 +21,8 @@ dependencies = [
     "soundfile>=0.12",
     "music21>=9.1",
     "pretty_midi>=0.2.10",
+    "pillow>=9.0",       # OMR: image loading / built-in engraver
+    "pypdfium2>=4.0",    # OMR: render PDF pages without system Poppler
 ]
 
 [project.optional-dependencies]
@@ -43,6 +45,21 @@ full = [
     "basic-pitch>=0.3",
     "onnxruntime>=1.15",
 ]
+# Optical Music Recognition engines (image/PDF -> MusicXML).  All optional:
+# without any of these the OMR pipeline uses its built-in classical-CV
+# recogniser.  oemer and homr are deep-learning engines; Audiveris is the Java
+# engine and is detected on PATH rather than pip-installed.
+omr = [
+    "oemer>=0.1.7",
+]
+omr-homr = [
+    "homr>=0.1",
+]
+# High-fidelity reference rendering for the accuracy harness (MusicXML -> image).
+omr-eval = [
+    "verovio>=4.0",
+    "cairosvg>=2.7",
+]
 # Browser-based web interface (upload audio -> download MusicXML).
 web = [
     "fastapi>=0.110",
@@ -61,6 +78,8 @@ dev = [
 [project.scripts]
 transcriber = "transcriber.cli:main"
 transcriber-web = "transcriber.web:main"
+omr = "transcriber.omr.cli:main"
+omr-eval = "transcriber.omr.eval.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/silas-dsc/transcriber"
