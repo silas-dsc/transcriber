@@ -149,11 +149,21 @@ def detect_staves(mask: np.ndarray) -> list[StaffSystem]:
 
 
 def _detect_staff_lines(mask: np.ndarray) -> tuple[list[float], int]:
-    """Return the y-centres of staff lines and the typical line thickness."""
-    proj = mask.sum(axis=1).astype(np.float64)
-    if proj.max() <= 0:
-        return [], 1
+    """Return the y-centres of staff lines and the typical line thickness.
+
+    Project a *horizontally opened* mask so only long, full-width runs survive.
+    This is essential on melodies that dwell on a single ledger-line pitch: the
+    many short ledger segments would otherwise pile up into a phantom staff line
+    and corrupt the staff geometry.
+    """
     width = mask.shape[1]
+    line_se = max(40, width // 6)  # far longer than a ledger line or note head
+    lines_only = ndimage.binary_opening(mask, structure=np.ones((1, line_se), dtype=bool))
+    proj = lines_only.sum(axis=1).astype(np.float64)
+    if proj.max() <= 0:  # fall back to the raw projection (e.g. very narrow input)
+        proj = mask.sum(axis=1).astype(np.float64)
+        if proj.max() <= 0:
+            return [], 1
     # A staff line spans most of the staff width.  Threshold relative to the
     # strongest row but with an absolute floor so faint lines still register.
     thresh = max(0.25 * width, 0.45 * proj.max())
