@@ -130,6 +130,7 @@ def _render_builtin(score: stream.Score, out_path: Path) -> Path:
     half = _STAFF_SPACE / 2.0
     _draw_key_signature(draw, sharps, bottom_line_y, half)
 
+    key_alter = _key_alteration(sharps)
     nw, nh = int(round(1.4 * _STAFF_SPACE)), _STAFF_SPACE
     notes_x0 = _LEFT_MARGIN + keysig_width
     for idx, (pitch, ql) in enumerate(events):
@@ -137,6 +138,11 @@ def _render_builtin(score: stream.Score, out_path: Path) -> Path:
         cx = notes_x0 + idx * _NOTE_SPACING + _NOTE_SPACING // 2
         cy = bottom_line_y - step * half
         bbox = [cx - nw // 2, cy - nh // 2, cx + nw // 2, cy + nh // 2]
+
+        # Draw an inline accidental when the note departs from the key signature.
+        actual_alter = pitch.accidental.alter if pitch.accidental else 0
+        if actual_alter != key_alter.get(pitch.step, 0):
+            _draw_accidental(draw, int(actual_alter), cx - nw // 2 - 8, cy)
 
         filled = ql < 2.0
         if filled:
@@ -197,6 +203,31 @@ def _draw_flat(draw, cx, cy):
     draw.rectangle([cx - 3, cy - h, cx - 2, cy + 4], fill=0)  # ascender
     # Filled bowl in the lower half (this is what distinguishes it from a sharp).
     draw.ellipse([cx - 2, cy - 2, cx + 4, cy + 5], fill=0)
+
+
+def _draw_natural(draw, cx, cy):
+    """A natural glyph: diagonally offset strokes (upper-left + lower-right)."""
+    h = int(0.9 * _STAFF_SPACE)
+    draw.rectangle([cx - 3, cy - h, cx - 3, cy + h // 3], fill=0, width=1)  # upper-left
+    draw.rectangle([cx + 3, cy - h // 3, cx + 3, cy + h], fill=0, width=1)  # lower-right
+    draw.rectangle([cx - 3, cy - 3, cx + 3, cy - 2], fill=0)
+    draw.rectangle([cx - 3, cy + 2, cx + 3, cy + 3], fill=0)
+
+
+def _draw_accidental(draw, alter: int, cx, cy) -> None:
+    if alter > 0:
+        _draw_sharp(draw, cx, cy)
+    elif alter < 0:
+        _draw_flat(draw, cx, cy)
+    else:
+        _draw_natural(draw, cx, cy)
+
+
+def _key_alteration(sharps: int) -> dict:
+    """Map a signed key signature to ``{step_letter: +1/-1}``."""
+    order = "FCGDAEB" if sharps > 0 else "BEADGCF"
+    alter = 1 if sharps > 0 else -1
+    return {letter: alter for letter in order[: abs(sharps)]}
 
 
 def _draw_ledger_lines(draw, step, cx, bottom_line_y, half, nw):

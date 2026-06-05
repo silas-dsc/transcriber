@@ -134,6 +134,39 @@ def test_no_false_key_signature_on_natural_phrase():
     assert [n.pitch for n in recognized.notes] == C_MAJOR_SCALE
 
 
+def _phrase_named(names):
+    from music21 import clef, meter, note, stream
+
+    score = stream.Score()
+    part = stream.Part()
+    part.insert(0, clef.TrebleClef())
+    part.insert(0, meter.TimeSignature("4/4"))
+    for i, name in enumerate(names):
+        n = note.Note(name)
+        n.quarterLength = 1.0
+        part.insert(float(i), n)
+    score.insert(0, part)
+    score.makeNotation(inPlace=True)
+    return score
+
+
+def test_recognizes_inline_sharps_flats_and_naturals():
+    # No key signature: every accidental here is an inline glyph on the note.
+    score = _phrase_named(["C5", "C#5", "D5", "D-5", "E5", "F5", "G5", "G#5"])
+    recognized = recognize_image(render_reference_array(score))
+    expected = [n.pitch.midi for n in score.flatten().notes]
+    assert [n.pitch for n in recognized.notes] == expected
+
+
+def test_inline_natural_cancels_key_signature():
+    # D major (F#, C#) with an explicit F-natural: must read F natural (65),
+    # not the key-signature F# (66).
+    score = _keyed_phrase([66, 69, 71, 74, 65, 69, 66, 62], sharps=2)
+    score.recurse().notes[4].pitch.accidental = "natural"  # the F4
+    recognized = recognize_image(render_reference_array(score))
+    assert recognized.notes[4].pitch == 65
+
+
 # --------------------------------------------------------------------------- #
 # Metrics
 # --------------------------------------------------------------------------- #

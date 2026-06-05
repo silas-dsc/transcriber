@@ -90,8 +90,16 @@ def recognize_image(image: np.ndarray, config: PrimitiveConfig | None = None) ->
         return RecognizedScore(notes=[], systems=[], page_count=1)
 
     staff_space = float(np.median([s.staff_space for s in staves]))
-    key_sharps, keysig_x = detect_key_signature(mask, staves, staff_space)
-    heads = _detect_heads(mask, staves, staff_space, config, min_x=keysig_x)
+    # Detect accidental glyphs first; the key signature is their leftmost
+    # cluster, and erasing all of them keeps them from polluting head detection.
+    glyphs = _find_accidental_glyphs(mask, staves, staff_space)
+    key_sharps, keysig_x = _keysig_from_glyphs(glyphs, staves[0], staff_space)
+    clean = _erase_glyphs(mask, glyphs)
+    heads = _detect_heads(clean, staves, staff_space, config, min_x=keysig_x)
+
+    # Attach inline accidentals (printed sharps/flats/naturals that depart from
+    # the key signature) to their note heads.
+    _assign_inline_accidentals(glyphs, heads, staff_space, keysig_x)
 
     notes = _heads_to_notes(heads, staves, config, key_sharps=key_sharps)
     logger.info(
@@ -209,6 +217,20 @@ class _Head:
     y: float
     filled: bool
     staff_index: int
+    inline_alter: int | None = None  # explicit accidental on this note, if any
+
+
+@dataclass
+class _AccGlyph:
+    """A detected accidental glyph (sharp / flat / natural)."""
+
+    cx: float
+    cy: float
+    component: np.ndarray  # boolean bitmap of the glyph within ``bbox``
+    bbox: tuple  # (slice, slice) location of the glyph in the image
+
+    def alter(self) -> int:
+        return _classify_accidental(self.component)
 
 
 def _detect_heads(
@@ -234,79 +256,146 @@ def _detect_heads(
     return heads
 
 
-def detect_key_signature(
+def _find_accidental_glyphs(
     mask: np.ndarray, staves: list[StaffSystem], staff_space: float
-) -> tuple[int, float]:
-    """Detect the key signature from accidental glyphs after the clef.
+) -> list[_AccGlyph]:
+    """Find every accidental-shaped glyph (sharp / flat / natural) on the staff.
 
-    Returns ``(signed_count, region_right_x)``: a positive count for sharps, a
-    negative count for flats, and the x past which note heads begin.  Key
-    signatures use a fixed number of accidentals in a fixed circle-of-fifths
-    order, so counting the glyphs and classifying them sharp-vs-flat is enough
-    to reconstruct which pitches are altered -- their exact positions are not
-    needed.
+    Accidentals are tall, narrow, sit on the staff, and have a tall vertical
+    stroke (which distinguishes them from staff-line-removal edge stubs).
     """
     if not staves:
-        return 0, 0.0
+        return []
     staff = staves[0]
     no_lines = _remove_staff_lines(mask, staves, staff_space)
     labels, n = ndimage.label(no_lines)
     if n == 0:
-        return 0, 0.0
+        return []
 
     top = staff.top_line_y - 1.5 * staff_space
     bot = staff.bottom_line_y + 1.5 * staff_space
-    glyphs: list[tuple[float, slice, int]] = []  # (cx, slice, label)
+    glyphs: list[_AccGlyph] = []
     for idx, sl in enumerate(ndimage.find_objects(labels), start=1):
         if sl is None:
             continue
         ys, xs = sl
         h, w = ys.stop - ys.start, xs.stop - xs.start
         cy, cx = (ys.start + ys.stop - 1) / 2.0, (xs.start + xs.stop - 1) / 2.0
-        # Accidental glyphs are tall and narrow, and sit on the staff.
         if not (1.1 * staff_space <= h <= 2.8 * staff_space and 0.2 * staff_space <= w <= 1.1 * staff_space):
             continue
         if (w / h) >= 0.8 or not (top <= cy <= bot):
             continue
-        # A real sharp/flat has a tall vertical stroke; a staff-line-removal
-        # edge stub is horizontal fragments with no tall column.  Require the
-        # densest column to span most of the glyph height.
         component = labels[sl] == idx
         if int(component.sum(axis=0).max()) < 0.55 * h:
             continue
-        glyphs.append((cx, sl, idx))
+        glyphs.append(_AccGlyph(cx=cx, cy=cy, component=component, bbox=sl))
 
-    glyphs.sort(key=lambda g: g[0])
+    glyphs.sort(key=lambda g: g.cx)
+    return glyphs
+
+
+def _erase_glyphs(mask: np.ndarray, glyphs: list[_AccGlyph]) -> np.ndarray:
+    """Return a copy of ``mask`` with the accidental glyphs removed.
+
+    Detecting accidentals before note heads and clearing them prevents a flat's
+    filled bowl from being mistaken for a small head, and stops sharps from
+    disturbing an adjacent head.
+    """
+    out = mask.copy()
+    for g in glyphs:
+        region = out[g.bbox]
+        region[g.component] = False
+    return out
+
+
+def _classify_accidental(comp: np.ndarray) -> int:
+    """Classify an accidental glyph: ``+1`` sharp, ``-1`` flat, ``0`` natural."""
+    h, w = comp.shape
+    total = int(comp.sum()) or 1
+    top_ink = int(comp[: h // 3, :].sum())
+    bot_ink = int(comp[2 * h // 3 :, :].sum())
+    # A flat's filled bowl makes the bottom far heavier than the (thin) top.
+    if bot_ink / max(top_ink, 1) > 2.2:
+        return -1
+    # Sharp vs natural: a natural's strokes are diagonally offset (upper-left +
+    # lower-right), a sharp is vertically symmetric.
+    tl = int(comp[: h // 2, : w // 2].sum())
+    tr = int(comp[: h // 2, w // 2 :].sum())
+    bl = int(comp[h // 2 :, : w // 2].sum())
+    br = int(comp[h // 2 :, w // 2 :].sum())
+    diagonal = (tl + br) - (tr + bl)
+    if diagonal / total > 0.12:
+        return 0  # natural
+    return 1  # sharp
+
+
+def detect_key_signature(
+    mask: np.ndarray, staves: list[StaffSystem], staff_space: float
+) -> tuple[int, float]:
+    """Detect the key signature from the accidental cluster after the clef.
+
+    Returns ``(signed_count, region_right_x)``: positive for sharps, negative
+    for flats.  Key signatures use a fixed number of accidentals in a fixed
+    circle-of-fifths order, so the count plus a sharp-vs-flat decision is enough
+    to reconstruct which pitches are altered.
+    """
+    if not staves:
+        return 0, 0.0
+    glyphs = _find_accidental_glyphs(mask, staves, staff_space)
+    return _keysig_from_glyphs(glyphs, staves[0], staff_space)
+
+
+def _keysig_from_glyphs(
+    glyphs: list[_AccGlyph], staff: StaffSystem, staff_space: float
+) -> tuple[int, float]:
     # Keep the leftmost contiguous cluster that begins right after the clef.
-    cluster: list[tuple[float, slice, int]] = []
+    cluster: list[_AccGlyph] = []
     for g in glyphs:
         if not cluster:
-            if g[0] > staff.x_start + 3.0 * staff_space:
-                break  # first glyph is too far right to be a key signature
+            if g.cx > staff.x_start + 3.0 * staff_space:
+                break  # first glyph too far right to be a key signature
             cluster.append(g)
-        elif g[0] - cluster[-1][0] <= 1.8 * staff_space:
+        elif g.cx - cluster[-1].cx <= 1.8 * staff_space:
             cluster.append(g)
         else:
             break
     if not cluster:
         return 0, 0.0
 
-    # Classify sharp vs flat by where the ink sits: a flat's filled bowl makes
-    # the bottom third far heavier than the top (thin ascender); a sharp is
-    # vertically balanced.  The bottom/top ink ratio separates them cleanly
-    # (~1.1-1.8 for sharps vs ~3.4-4.3 for flats).
-    ratios = []
-    for _, sl, idx in cluster:
-        comp = labels[sl] == idx
-        h = comp.shape[0]
-        top_ink = int(comp[: h // 3, :].sum())
-        bot_ink = int(comp[2 * h // 3 :, :].sum())
-        ratios.append(bot_ink / max(top_ink, 1))
-    is_flat = float(np.median(ratios)) > 2.5
-
+    alters = [g.alter() for g in cluster]
+    # A key signature is all sharps or all flats; vote, and treat naturals (rare
+    # here) as not part of a key signature.
+    n_flat = sum(1 for a in alters if a < 0)
+    n_sharp = sum(1 for a in alters if a > 0)
     count = len(cluster)
-    region_right_x = cluster[-1][0] + 0.8 * staff_space
-    return (-count if is_flat else count), region_right_x
+    region_right_x = cluster[-1].cx + 0.8 * staff_space
+    if n_flat > n_sharp:
+        return -count, region_right_x
+    if n_sharp > 0:
+        return count, region_right_x
+    return 0, region_right_x
+
+
+def _assign_inline_accidentals(
+    glyphs: list[_AccGlyph],
+    heads: list[_Head],
+    staff_space: float,
+    keysig_x: float,
+) -> None:
+    """Attach each non-key-signature accidental glyph to the note on its right."""
+    for g in glyphs:
+        if g.cx <= keysig_x:
+            continue  # part of the key signature
+        # The note an accidental modifies sits just to its right, same height.
+        candidates = [
+            hd
+            for hd in heads
+            if 0.1 * staff_space <= (hd.x - g.cx) <= 1.9 * staff_space
+            and abs(hd.y - g.cy) <= 0.9 * staff_space
+        ]
+        if candidates:
+            nearest = min(candidates, key=lambda hd: hd.x - g.cx)
+            nearest.inline_alter = g.alter()
 
 
 def _is_head_shaped(h: float, w: float, staff_space: float) -> bool:
@@ -466,12 +555,15 @@ def _heads_to_notes(
         clef_name = clefs.get(head.staff_index + 1, config.default_clef)
         step = staff.step_at(head.y)
         midi, letter = _step_to_pitch(step, clef_name)
-        # A note head with no explicit accidental inherits the key signature.
+        # An explicit inline accidental overrides the key signature for this
+        # note; otherwise the note inherits the key signature.
         accidental = None
-        alter = key_alter.get(letter, 0)
+        alter = head.inline_alter if head.inline_alter is not None else key_alter.get(letter, 0)
         if alter:
             midi += alter
             accidental = "sharp" if alter > 0 else "flat"
+        elif head.inline_alter == 0:
+            accidental = "natural"
         duration = 1.0 if head.filled else 2.0
         onset = onset_by_staff.get(head.staff_index, 0.0)
         notes.append(

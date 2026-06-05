@@ -139,7 +139,7 @@ produced even with zero heavy dependencies.
 | Pre-processing | adaptive (Sauvola) binarisation, projection-profile **deskew**, speckle denoise |
 | Recognition (primary) | [oemer](https://github.com/BreezeWhite/oemer) deep-learning OMR → MusicXML |
 | Recognition (also supported) | [homr](https://github.com/liebharc/homr) (transformer / Polyphonic-TrOMR), [Audiveris](https://github.com/Audiveris/audiveris) (Java, on `PATH`) |
-| Recognition (built-in fallback) | classical-CV recogniser: staff detection → staff-line removal → **key-signature detection** → dual filled/hollow note-head detection → key-aware pitch mapping |
+| Recognition (built-in fallback) | classical-CV recogniser: staff detection → staff-line removal → **key-signature + inline-accidental detection** → dual filled/hollow note-head detection → key/accidental-aware pitch mapping |
 | Ensembling | run several engines, keep the highest-confidence result |
 | Post-processing | merge multi-page output, repair & normalise via [music21](https://web.mit.edu/music21/) |
 | **Semantic checks** | musical sanity rules catch & repair likely errors (see below) |
@@ -239,14 +239,17 @@ Benchmark results for the built-in recogniser (offline, built-in renderer):
 | Corpus | Pieces | F1 | SER |
 | --- | --- | --- | --- |
 | Synthetic monophonic | 12 | **1.00** | 0.00 |
-| Bach chorales (top line) | 15 | **0.97** | 0.03 |
-| Palestrina (top line) | 5 | 0.96 | 0.04 |
-| Monteverdi (top line) | 5 | 0.97 | 0.03 |
+| Bach chorales (top line) | 15 | **1.00** | 0.00 |
+| Bach chorales (top line) | 30 | **0.98** | 0.03 |
+| Palestrina (top line) | 8 | **1.00** | 0.00 |
+| Monteverdi (top line) | 8 | **1.00** | 0.01 |
 
-Detecting the **key signature** from the image (and applying it to pitch
-spelling, exactly as a human reads it) was the single biggest lever on real
-music — it lifted the Bach score from F1 0.79 to 0.97. These are a useful floor
-that the deep-learning engines exceed on real-world scans. For real
+The road to these numbers shows the methodology: measure errors, categorise
+them, fix the systematic cause, re-measure. Reading the **key signature** off
+the image lifted Bach from F1 0.79 → 0.97; adding **inline-accidental**
+detection (the printed sharp/flat/natural glyphs on individual notes) took it to
+~1.00. On the 30-piece set, 29/30 pieces are recognised note-perfect. These are
+a floor the deep-learning engines exceed on real-world *scans*. For real
 PDF/MusicXML corpora the harness supports [OpenScore Lieder](https://github.com/OpenScore/Lieder),
 [PDMX](https://github.com/pnlong/PDMX), and the
 [OMR-Datasets](https://apacha.github.io/OMR-Datasets/) collection (see
@@ -257,12 +260,13 @@ PDF/MusicXML corpora the harness supports [OpenScore Lieder](https://github.com/
 - The built-in recogniser targets clean printed monophonic / simple polyphonic
   music; install `.[omr]` (oemer) for handwritten, dense, or photographed
   scores.
-- The built-in recogniser reads the **key signature** but not inline accidental
-  glyphs, so a *chromatic* note that departs from the key signature (a printed
-  sharp/flat/natural on an individual note) is read at its key-signature pitch.
-  A hollow note head sitting exactly on a staff line may also be read as a
-  filled (quarter) note, and beamed eighth-note durations are approximated. The
-  deep-learning engines handle these.
+- The built-in recogniser reads key signatures and inline accidentals
+  (sharp/flat/natural), but not double-accidentals, mid-staff clef changes, or
+  multi-voice chords; a hollow note head sitting exactly on a staff line may be
+  read as a filled (quarter) note; and beamed eighth-note durations are
+  approximated. The deep-learning engines handle these. *(The accuracy numbers
+  above are for the offline render→recognise loop; real-world camera scans are
+  harder — see "the road to 100%" below.)*
 
 ## Project layout
 
