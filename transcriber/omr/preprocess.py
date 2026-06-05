@@ -28,6 +28,8 @@ class PreprocessConfig:
             ``"otsu"`` (global, fast, best for clean scans) or ``"none"``.
         deskew: Whether to estimate and correct small rotations.
         max_skew_deg: Search range for deskew (degrees, +/-).
+        prefilter: Median-filter the grayscale before binarising to suppress
+            sensor / salt-and-pepper noise (preserves thin staff lines).
         denoise: Whether to drop tiny connected components (speckles).
         min_component_area: Components smaller than this (pixels) are removed.
     """
@@ -35,6 +37,7 @@ class PreprocessConfig:
     binarize: str = "sauvola"
     deskew: bool = True
     max_skew_deg: float = 8.0
+    prefilter: bool = True
     denoise: bool = True
     min_component_area: int = 6
 
@@ -51,6 +54,9 @@ def preprocess(image: np.ndarray, config: PreprocessConfig | None = None) -> np.
     """
     config = config or PreprocessConfig()
 
+    if config.prefilter:
+        image = _denoise_gray(image)
+
     if config.deskew:
         angle = estimate_skew(image, max_deg=config.max_skew_deg)
         if abs(angle) > 0.05:
@@ -63,6 +69,33 @@ def preprocess(image: np.ndarray, config: PreprocessConfig | None = None) -> np.
         mask = _drop_small_components(mask, config.min_component_area)
 
     return mask
+
+
+def _denoise_gray(image: np.ndarray) -> np.ndarray:
+    """Suppress noise in the grayscale image without harming thin staff lines.
+
+    * **Salt-and-pepper**: an *adaptive* median replaces only pixels that are
+      extreme outliers vs their 3x3 median; staff lines (which match their
+      neighbourhood) and clean images are left untouched.
+    Crucially this is *gated*: it only acts when the fraction of outlier pixels
+    indicates real noise.  Clean line art has a few naturally-isolated pixels
+    (thin stems, line ends) that should NOT be touched -- filtering them nicks
+    staff lines and breaks detection -- so on clean input the image passes
+    through unchanged.
+    """
+    med = ndimage.median_filter(image, size=3)
+    extreme = np.abs(image - med) > 0.4  # salt-and-pepper pixels
+    # Clean renders have ~0.15% naturally-isolated pixels (thin stems, line
+    # ends); salt-and-pepper has many times that.  Only act when clearly above
+    # that baseline, and replace *only* the extreme pixels -- so clean input and
+    # staff lines are untouched.  Moderate Gaussian noise produces few extreme
+    # pixels, so it does not trigger here and is left to Sauvola thresholding
+    # (which handles it well; blurring would nick the thin staff lines).
+    # Clean scores -- even those full of thin sharp/flat strokes -- stay well
+    # under this threshold (~0.003); salt-and-pepper at 2%+ is several times it.
+    if extreme.mean() < 0.006:
+        return image
+    return np.where(extreme, med, image)
 
 
 def binarize(image: np.ndarray, method: str = "sauvola") -> np.ndarray:
@@ -132,16 +165,19 @@ def estimate_skew(image: np.ndarray, max_deg: float = 8.0, step: float = 0.5) ->
     if mask.sum() == 0:
         return 0.0
 
-    angles = np.arange(-max_deg, max_deg + step, step)
-    best_angle, best_score = 0.0, -1.0
-    for angle in angles:
+    def score_at(angle: float) -> float:
         rotated = ndimage.rotate(mask, angle, reshape=False, order=1, mode="constant")
-        projection = rotated.sum(axis=1)
-        diff = np.diff(projection)
-        score = float(np.dot(diff, diff))
-        if score > best_score:
-            best_score, best_angle = score, float(angle)
-    return best_angle
+        diff = np.diff(rotated.sum(axis=1))
+        return float(np.dot(diff, diff))
+
+    # Coarse search over the full range, then refine around the best angle.  On
+    # very wide staves a residual of even 0.25 deg drifts note heads by several
+    # pixels across the page, so sub-0.5-deg precision matters.
+    coarse = np.arange(-max_deg, max_deg + step, step)
+    best_angle = max(coarse, key=score_at)
+    fine = np.arange(best_angle - step, best_angle + step + 1e-9, 0.1)
+    best_angle = max(fine, key=score_at)
+    return float(best_angle)
 
 
 def _rotate_gray(image: np.ndarray, angle: float) -> np.ndarray:

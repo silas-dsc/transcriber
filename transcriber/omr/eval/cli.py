@@ -43,6 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["builtin", "verovio", "auto"],
         help="Reference renderer (default: builtin).",
     )
+    parser.add_argument(
+        "--augment",
+        default="clean",
+        help="Image degradation preset to test robustness: clean, rotate, "
+        "rotate_hard, noise, blur, warp, lighting, photo (default: clean).",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging.")
     return parser
 
@@ -63,7 +69,9 @@ def main(argv: list[str] | None = None) -> int:
         print("error: no corpus items to evaluate", file=sys.stderr)
         return 1
 
-    result = evaluate_corpus(items, engine=args.engine, renderer=args.renderer)
+    result = evaluate_corpus(
+        items, engine=args.engine, renderer=args.renderer, augmentation=args.augment
+    )
     print(format_report(result))
     return 0
 

@@ -158,6 +158,40 @@ def test_recognizes_inline_sharps_flats_and_naturals():
     assert [n.pitch for n in recognized.notes] == expected
 
 
+def test_clean_preprocessing_is_lossless_on_clean_input():
+    # The noise gating must leave clean line art untouched (no nicked staff
+    # lines): a clean phrase still round-trips perfectly.
+    recognized = recognize_image(render_reference_array(make_phrase(C_MAJOR_SCALE)))
+    assert [n.pitch for n in recognized.notes] == C_MAJOR_SCALE
+
+
+def test_robust_to_lighting_and_warp():
+    from transcriber.omr.eval.augment import augment_preset
+
+    score = make_phrase(C_MAJOR_SCALE)
+    clean = render_reference_array(score)
+    for preset in ("lighting", "warp"):
+        degraded = augment_preset(clean, preset)
+        recognized = recognize_image(degraded)
+        assert [n.pitch for n in recognized.notes] == C_MAJOR_SCALE, preset
+
+
+def test_salt_pepper_despeckling_helps():
+    from transcriber.omr.eval.augment import augment
+    from transcriber.omr.eval.metrics import compare_scores
+    from transcriber.omr.assemble import build_score
+    from transcriber.omr.primitive import PrimitiveConfig
+    from transcriber.omr.preprocess import PreprocessConfig
+
+    score = make_phrase(C_MAJOR_SCALE)
+    noisy = augment(render_reference_array(score), salt_pepper=0.04, seed=1)
+    off = PrimitiveConfig(preprocess=PreprocessConfig(prefilter=False))
+    f1_off = compare_scores(score, build_score(recognize_image(noisy, off))).f1
+    f1_on = compare_scores(score, build_score(recognize_image(noisy))).f1
+    # The de-speckling prefilter must substantially beat raw thresholding.
+    assert f1_on > f1_off + 0.2
+
+
 def test_inline_natural_cancels_key_signature():
     # D major (F#, C#) with an explicit F-natural: must read F natural (65),
     # not the key-signature F# (66).

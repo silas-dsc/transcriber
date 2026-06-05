@@ -15,7 +15,11 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
+from PIL import Image
+
 from ..pipeline import OMRConfig, recognize
+from .augment import augment_preset
 from .datasets import CorpusItem
 from .metrics import ScoreComparison, compare_scores
 from .render_ref import render_reference
@@ -69,13 +73,22 @@ def evaluate_corpus(
     renderer: str = "builtin",
     dpi: int = 300,
     time_signature: str = "4/4",
+    augmentation: str = "clean",
 ) -> HarnessResult:
-    """Render, recognise and score every item in ``items``."""
+    """Render, recognise and score every item in ``items``.
+
+    Args:
+        augmentation: Named degradation preset applied to the rendered image
+            before recognition (``"clean"`` = none).  Exercises the
+            pre-processing pipeline against skew / warp / noise / blur.
+    """
     result = HarnessResult(engine=engine)
     with tempfile.TemporaryDirectory(prefix="omr_eval_") as tmp:
         tmpdir = Path(tmp)
         for item in items:
             image = render_reference(item.score, tmpdir / f"{item.id}.png", renderer=renderer)
+            if augmentation != "clean":
+                image = _augment_file(image, augmentation)
             config = OMRConfig(engine=engine, dpi=dpi, time_signature=time_signature)
             recognized = recognize(image, output_path=None, config=config)
             comparison = compare_scores(item.score, recognized.score)
@@ -89,6 +102,16 @@ def evaluate_corpus(
                 comparison.n_predicted,
             )
     return result
+
+
+def _augment_file(image_path: Path, preset: str) -> Path:
+    """Load, degrade, and re-save a rendered image; return the new path."""
+    with Image.open(image_path) as im:
+        arr = np.asarray(im.convert("L"), dtype=np.float32) / 255.0
+    degraded = augment_preset(arr, preset)
+    out = image_path.with_name(f"{image_path.stem}_{preset}.png")
+    Image.fromarray((degraded * 255).clip(0, 255).astype("uint8"), mode="L").save(out)
+    return out
 
 
 def format_report(result: HarnessResult) -> str:
