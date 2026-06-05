@@ -90,12 +90,18 @@ def recognize_image(image: np.ndarray, config: PrimitiveConfig | None = None) ->
         return RecognizedScore(notes=[], systems=[], page_count=1)
 
     staff_space = float(np.median([s.staff_space for s in staves]))
-    # Detect accidental glyphs first; the key signature is their leftmost
-    # cluster, and erasing all of them keeps them from polluting head detection.
+    # Detect accidental glyphs first and erase *all* of them before head
+    # detection, so neither a key signature nor an inline accidental is mistaken
+    # for a note head.
     glyphs = _find_accidental_glyphs(mask, staves, staff_space)
-    key_sharps, keysig_x = _keysig_from_glyphs(glyphs, staves[0], staff_space)
     clean = _erase_glyphs(mask, glyphs)
-    heads = _detect_heads(clean, staves, staff_space, config, min_x=keysig_x)
+    heads = _detect_heads(clean, staves, staff_space, config)
+
+    # The key signature is the leftmost glyph cluster -- but only if it sits
+    # clearly left of the first note head.  A lone accidental hugging the first
+    # head is an inline accidental on that note, not a one-sharp/flat key.
+    first_head_x = min((h.x for h in heads), default=None)
+    key_sharps, keysig_x = _keysig_from_glyphs(glyphs, staves[0], staff_space, first_head_x)
 
     # Attach inline accidentals (printed sharps/flats/naturals that depart from
     # the key signature) to their note heads.
@@ -282,8 +288,11 @@ def _find_accidental_glyphs(
     if n == 0:
         return []
 
-    top = staff.top_line_y - 1.5 * staff_space
-    bot = staff.bottom_line_y + 1.5 * staff_space
+    # An accidental sits at its note head's height, which for a ledger-line
+    # note can be several staff spaces above/below the staff -- match the
+    # note-head vertical reach so high/low accidentals are not missed.
+    top = staff.top_line_y - 4.0 * staff_space
+    bot = staff.bottom_line_y + 4.0 * staff_space
     glyphs: list[_AccGlyph] = []
     for idx, sl in enumerate(ndimage.find_objects(labels), start=1):
         if sl is None:
@@ -356,7 +365,10 @@ def detect_key_signature(
 
 
 def _keysig_from_glyphs(
-    glyphs: list[_AccGlyph], staff: StaffSystem, staff_space: float
+    glyphs: list[_AccGlyph],
+    staff: StaffSystem,
+    staff_space: float,
+    first_head_x: float | None = None,
 ) -> tuple[int, float]:
     # Keep the leftmost contiguous cluster that begins right after the clef.
     cluster: list[_AccGlyph] = []
@@ -370,6 +382,12 @@ def _keysig_from_glyphs(
         else:
             break
     if not cluster:
+        return 0, 0.0
+
+    # A key signature sits clearly to the left of the first note (a clef's worth
+    # of space); an accidental hugging the first head (~1.75 spaces, centre to
+    # centre) is an inline accidental on that note, not a one-sharp/flat key.
+    if first_head_x is not None and (first_head_x - cluster[-1].cx) < 2.5 * staff_space:
         return 0, 0.0
 
     alters = [g.alter() for g in cluster]

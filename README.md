@@ -236,20 +236,26 @@ omr-eval --dataset music21 --query bach --limit 5 --engine auto
 
 Benchmark results for the built-in recogniser (offline, built-in renderer):
 
-| Corpus | Pieces | F1 | SER |
-| --- | --- | --- | --- |
-| Synthetic monophonic | 12 | **1.00** | 0.00 |
-| Bach chorales (top line) | 15 | **1.00** | 0.00 |
-| Bach chorales (top line) | 30 | **0.98** | 0.03 |
-| Palestrina (top line) | 8 | **1.00** | 0.00 |
-| Monteverdi (top line) | 8 | **1.00** | 0.01 |
+Note-level F1 on the offline render→recognise loop (built-in recogniser):
+
+| Corpus | Pieces | F1 |
+| --- | --- | --- |
+| Synthetic monophonic | 12 | **1.00** |
+| Bach chorales (top line) | 50 | **1.00** |
+| Palestrina (top line) | 30 | **1.00** |
+| Monteverdi madrigals (top line) | 48 | **1.00** |
+| ryansMammoth fiddle tunes | 40 | **1.00** |
+| O'Neill's 1850 Irish tunes | 40 | **1.00** |
+| Essen folk songs | 80 | **1.00** |
 
 The road to these numbers shows the methodology: measure errors, categorise
 them, fix the systematic cause, re-measure. Reading the **key signature** off
-the image lifted Bach from F1 0.79 → 0.97; adding **inline-accidental**
-detection (the printed sharp/flat/natural glyphs on individual notes) took it to
-~1.00. On the 30-piece set, 29/30 pieces are recognised note-perfect. These are
-a floor the deep-learning engines exceed on real-world *scans*. For real
+the image lifted Bach from F1 0.79 → 0.97; **inline-accidental** detection (the
+printed sharp/flat/natural glyphs on individual notes, including on high/low
+ledger-line notes and distinguished from a key signature on the first note) and
+a **simultaneous-note ordering** fix took every corpus to **note-perfect** pitch
+recognition. These are a floor the deep-learning engines exceed on real-world
+*scans* (which are harder — see the robustness note below). For real
 PDF/MusicXML corpora the harness supports [OpenScore Lieder](https://github.com/OpenScore/Lieder),
 [PDMX](https://github.com/pnlong/PDMX), and the
 [OMR-Datasets](https://apacha.github.io/OMR-Datasets/) collection (see

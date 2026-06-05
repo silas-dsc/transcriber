@@ -147,7 +147,7 @@ def _render_builtin(score: stream.Score, out_path: Path) -> Path:
         # Draw an inline accidental when the note departs from the key signature.
         actual_alter = pitch.accidental.alter if pitch.accidental else 0
         if actual_alter != key_alter.get(pitch.step, 0):
-            _draw_accidental(draw, int(actual_alter), cx - nw // 2 - 8, cy)
+            _draw_accidental(draw, int(actual_alter), cx - nw // 2 - 13, cy)
 
         filled = ql < 2.0
         if filled:

@@ -192,6 +192,23 @@ def test_salt_pepper_despeckling_helps():
     assert f1_on > f1_off + 0.2
 
 
+def test_inline_accidental_on_high_ledger_note():
+    # An inline sharp on a high ledger-line note (C#6) must be detected and
+    # applied -- the accidental glyph sits several spaces above the staff.
+    score = _phrase_named(["C#6", "C#6", "C#6", "C#6"])
+    recognized = recognize_image(render_reference_array(score))
+    assert [n.pitch for n in recognized.notes] == [85, 85, 85, 85]
+
+
+def test_first_note_accidental_not_mistaken_for_key_signature():
+    # A lone inline accidental on the first note must not be read as a one-sharp
+    # key signature (which would also shift later notes).
+    score = _phrase_named(["G#4", "A4", "B4", "C5"])
+    recognized = recognize_image(render_reference_array(score))
+    assert recognized.key_sharps == 0
+    assert [n.pitch for n in recognized.notes] == [68, 69, 71, 72]
+
+
 def test_inline_natural_cancels_key_signature():
     # D major (F#, C#) with an explicit F-natural: must read F natural (65),
     # not the key-signature F# (66).
