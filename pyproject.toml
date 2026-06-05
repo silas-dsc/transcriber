@@ -60,6 +60,10 @@ omr-eval = [
     "verovio>=4.0",
     "cairosvg>=2.7",
 ]
+# Optional LLM-based musical sense-checking of recognised scores (Claude).
+llm = [
+    "anthropic>=0.40",
+]
 # Browser-based web interface (upload audio -> download MusicXML).
 web = [
     "fastapi>=0.110",

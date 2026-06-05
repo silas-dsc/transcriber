@@ -179,7 +179,112 @@ def test_recognize_multipage_pdf(tmp_path):
 def test_synthetic_benchmark_meets_accuracy_floor():
     items = synthetic_corpus(n_items=6, notes_per_item=8, seed=1)
     result = evaluate_corpus(items, engine="primitive")
-    # The built-in recogniser must clear a quality floor on clean printed music.
-    assert result.mean_f1 >= 0.8
-    assert result.mean_precision >= 0.9
+    # The built-in recogniser + semantic post-processing must clear a high
+    # quality floor on clean printed monophonic music.
+    assert result.mean_f1 >= 0.9
+    assert result.mean_precision >= 0.95
     assert "MEAN" in format_report(result)
+
+
+# --------------------------------------------------------------------------- #
+# Semantic sanity checks
+# --------------------------------------------------------------------------- #
+def test_semantic_infers_a_key():
+    from transcriber.omr.semantic import validate
+
+    # A bare C-major scale is tonally ambiguous (music21 may report the
+    # relative A minor); we only assert that key inference produced something.
+    _, report = validate(make_phrase(C_MAJOR_SCALE))
+    assert report.key is not None
+    assert report.key.split()[0] in {"C", "A"}
+
+
+def test_semantic_merges_exact_duplicate_notes():
+    from music21 import note as m21note
+
+    from transcriber.omr.semantic import validate
+
+    score = make_phrase([60, 62, 64], [1, 1, 1])
+    dup = m21note.Note(62)
+    dup.quarterLength = 1.0
+    score.parts[0].insert(1.0, dup)  # duplicate of the second note
+    before = len(score.flatten().notes)
+    fixed, report = validate(score, repair=True)
+    assert len(fixed.flatten().notes) == before - 1
+    assert report.n_fixed >= 1
+
+
+def test_semantic_corrects_octave_outlier_when_aggressive():
+    from transcriber.omr.semantic import validate
+
+    # 84 (C6) is an octave-plus leap away from its neighbours on both sides.
+    score = make_phrase([60, 62, 84, 64, 67, 69, 71, 72], [1] * 8)
+    fixed, report = validate(score, repair=True, aggressive=True)
+    pitches = [n.pitch.midi for n in fixed.flatten().notes]
+    assert 84 not in pitches  # the outlier was pulled back an octave
+    assert any(i.kind == "octave_outlier" and i.fixed for i in report.issues)
+
+
+def test_semantic_flags_but_does_not_fix_octave_outlier_by_default():
+    from transcriber.omr.semantic import validate
+
+    score = make_phrase([60, 62, 84, 64, 67, 69, 71, 72], [1] * 8)
+    fixed, report = validate(score, repair=True, aggressive=False)
+    pitches = [n.pitch.midi for n in fixed.flatten().notes]
+    assert 84 in pitches  # left unchanged
+    assert any(i.kind == "octave_outlier" and not i.fixed for i in report.issues)
+
+
+# --------------------------------------------------------------------------- #
+# LLM review (offline, with an injected fake client)
+# --------------------------------------------------------------------------- #
+class _FakeBlock:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeMessages:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def create(self, **kwargs):
+        import json
+        import types
+
+        return types.SimpleNamespace(content=[_FakeBlock(json.dumps(self._payload))])
+
+
+class _FakeClient:
+    def __init__(self, payload):
+        self.messages = _FakeMessages(payload)
+
+
+def test_llm_review_applies_validated_octave_correction():
+    from transcriber.omr.llm_review import review_score
+
+    score = make_phrase([60, 62, 84, 64], [1, 1, 1, 1])
+    client = _FakeClient({"corrections": [{"index": 2, "action": "octave_down", "reason": "outlier"}]})
+    fixed, report = review_score(score, client=client, apply=True)
+    assert report.applied == 1
+    assert 72 in [n.pitch.midi for n in fixed.flatten().notes]  # 84 -> 72
+
+
+def test_llm_review_rejects_out_of_range_index():
+    from transcriber.omr.llm_review import review_score
+
+    score = make_phrase([60, 62, 64], [1, 1, 1])
+    client = _FakeClient({"corrections": [{"index": 99, "action": "octave_up", "reason": "bad"}]})
+    _, report = review_score(score, client=client, apply=True)
+    assert report.applied == 0 and report.skipped == 1
+
+
+def test_llm_review_never_runs_without_client_or_sdk(monkeypatch):
+    from transcriber.omr import llm_review
+
+    # Simulate no SDK / no credentials: _make_client returns None.
+    monkeypatch.setattr(llm_review, "_make_client", lambda: None)
+    score = make_phrase(C_MAJOR_SCALE)
+    _, report = llm_review.review_score(score, client=None)
+    assert report.error is not None and report.applied == 0

@@ -20,6 +20,8 @@ from .ensemble import recognize_ensemble
 from .postprocess import repair_score, score_confidence
 from .primitive import PrimitiveConfig
 from .rendering import load_pages
+from .semantic import SemanticReport
+from .semantic import validate as semantic_validate
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,14 @@ class OMRConfig:
         clefs: Optional per-staff clef names (1-based) for the primitive engine.
         title: Score title (defaults to the input file stem).
         primitive_config: Fine-grained settings for the built-in recogniser.
+        semantic_check: Run musical sanity checks and safe repairs (duplicate
+            merge, key-consistent re-spelling) on the recognised score.
+        semantic_aggressive: Also apply risky semantic repairs (octave-outlier
+            correction).  When ``False`` such issues are flagged, not changed.
+        llm_review: Cross-check the recognised notes with Claude and apply
+            validated, conservative corrections (octave / duration / duplicate).
+            Off by default; requires the ``anthropic`` package and an API key.
+        llm_model: Claude model id used when ``llm_review`` is enabled.
     """
 
     engine: str = "auto"
@@ -44,6 +54,10 @@ class OMRConfig:
     clefs: dict[int, str] | None = None
     title: str = "Optical transcription"
     primitive_config: PrimitiveConfig | None = None
+    semantic_check: bool = True
+    semantic_aggressive: bool = False
+    llm_review: bool = False
+    llm_model: str = "claude-opus-4-8"
 
 
 @dataclass
@@ -57,6 +71,7 @@ class OMRResult:
         page_count: Number of pages processed.
         confidence: Confidence of the selected result in ``[0, 1]``.
         engine_confidences: Per-engine confidence (populated for ensembles).
+        semantic_report: Musical sanity-check report, if semantic checks ran.
     """
 
     score: stream.Score
@@ -65,6 +80,7 @@ class OMRResult:
     page_count: int
     confidence: float
     engine_confidences: dict[str, float] = field(default_factory=dict)
+    semantic_report: SemanticReport | None = None
 
 
 def recognize(
@@ -115,6 +131,23 @@ def recognize(
 
     score = repair_score(score)
 
+    semantic_report = None
+    if config.semantic_check:
+        score, semantic_report = semantic_validate(
+            score, repair=True, aggressive=config.semantic_aggressive
+        )
+
+    if config.llm_review:
+        from .llm_review import review_score
+
+        key_hint = semantic_report.key if semantic_report else None
+        score, _ = review_score(
+            score,
+            key_hint=key_hint,
+            time_signature=config.time_signature,
+            model=config.llm_model,
+        )
+
     written: str | None = None
     if output_path is not None:
         written = str(score.write("musicxml", fp=str(output_path)))
@@ -127,6 +160,7 @@ def recognize(
         page_count=len(pages),
         confidence=confidence,
         engine_confidences=engine_confidences,
+        semantic_report=semantic_report,
     )
 
 

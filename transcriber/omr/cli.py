@@ -55,6 +55,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Score title (defaults to the input file stem).",
     )
     parser.add_argument(
+        "--no-semantic",
+        action="store_true",
+        help="Skip the musical sanity checks / safe repairs.",
+    )
+    parser.add_argument(
+        "--aggressive",
+        action="store_true",
+        help="Also apply risky semantic repairs (octave-outlier correction).",
+    )
+    parser.add_argument(
+        "--llm-review",
+        action="store_true",
+        help="Cross-check the result with Claude (needs the 'llm' extra + API key).",
+    )
+    parser.add_argument(
         "--list-engines",
         action="store_true",
         help="List the OMR engines available in this environment and exit.",
@@ -95,6 +110,9 @@ def main(argv: list[str] | None = None) -> int:
         dpi=args.dpi,
         time_signature=args.time_signature,
         title=title,
+        semantic_check=not args.no_semantic,
+        semantic_aggressive=args.aggressive,
+        llm_review=args.llm_review,
     )
 
     result = recognize(args.input, output, config=config)
@@ -105,6 +123,12 @@ def main(argv: list[str] | None = None) -> int:
     if len(result.engine_confidences) > 1:
         ranked = sorted(result.engine_confidences.items(), key=lambda kv: -kv[1])
         print("Ensemble:   " + ", ".join(f"{n}={c:.2f}" for n, c in ranked))
+    if result.semantic_report is not None:
+        report = result.semantic_report
+        print(f"Semantic:   {report.summary()}")
+        for issue in report.issues:
+            if not issue.fixed:
+                print(f"  [{issue.severity}] {issue.message}")
     print(f"MusicXML written to: {result.output_path}")
     return 0
 

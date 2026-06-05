@@ -142,6 +142,8 @@ produced even with zero heavy dependencies.
 | Recognition (built-in fallback) | classical-CV recogniser: staff detection → staff-line removal → dual filled/hollow note-head detection → clef-aware pitch mapping |
 | Ensembling | run several engines, keep the highest-confidence result |
 | Post-processing | merge multi-page output, repair & normalise via [music21](https://web.mit.edu/music21/) |
+| **Semantic checks** | musical sanity rules catch & repair likely errors (see below) |
+| **LLM sense-check** (optional) | Claude reviews the symbolic result and proposes conservative corrections |
 
 Every external engine is **optional**. With only the core dependencies the
 pipeline uses its built-in recogniser, which depends solely on numpy/scipy/Pillow.
@@ -160,12 +162,36 @@ fields to lift accuracy regardless of which engine runs:
 - **Model ensembling**: when several engines are installed, run them all and
   select the most confident transcription.
 
+### Accuracy: semantic checks and LLM sense-checking
+
+OMR errors are often invisible at the pixel level but obvious *musically*. Two
+post-processing layers exploit that:
+
+- **Semantic sanity checks** (`semantic.py`, on by default, deterministic and
+  offline): infer the key; flag measures whose beats don't add up; detect notes
+  an octave from their neighbours (a misread ledger line); flag pitches outside
+  the clef's range; and merge exact duplicate detections. *Safe* repairs
+  (duplicate merge, key-consistent re-spelling) are applied automatically;
+  *risky* ones (octave correction) are applied only with `--aggressive`,
+  otherwise just reported for review. On the clean-monophonic benchmark, the
+  duplicate-merge step alone lifts the built-in recogniser from F1 ≈ 0.99 to
+  **F1 ≈ 1.0**.
+- **LLM sense-checking** (`llm_review.py`, optional, `--llm-review`): Claude
+  reviews the *symbolic* note sequence (not the image — current models are not
+  reliable at reading pitch from pixels) and proposes a closed set of
+  conservative edits to notes that already exist (octave shift, duration fix,
+  duplicate deletion). Every suggestion is validated against the score before
+  being applied, so a bad suggestion is dropped, never trusted — the model can
+  flag and fix, but never invent notes. Requires `pip install -e ".[llm]"` and
+  `ANTHROPIC_API_KEY`.
+
 ### Install
 
 ```bash
-pip install -e .            # built-in recogniser works out of the box
+pip install -e .            # built-in recogniser + semantic checks, out of the box
 pip install -e ".[omr]"     # + oemer (deep-learning OMR)
 pip install -e ".[omr-eval]" # + verovio/cairosvg for the accuracy harness
+pip install -e ".[llm]"     # + anthropic SDK for LLM sense-checking
 ```
 
 ### Command line
@@ -245,6 +271,8 @@ transcriber/
     engines.py      # oemer / homr / Audiveris wrappers + fallback selection
     ensemble.py     # multi-engine selection
     postprocess.py  # page merge, repair, confidence
+    semantic.py     # musical sanity checks & safe repairs
+    llm_review.py   # optional Claude sense-check of the recognised notes
     assemble.py     # recognised notes -> music21 score
     pipeline.py     # orchestration
     cli.py          # `omr` command
