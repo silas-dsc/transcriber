@@ -21,7 +21,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-from music21 import chord, clef, meter, note, stream
+from music21 import chord, clef, key, meter, note, stream
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +132,10 @@ def monophonic_top_line(score: stream.Score) -> stream.Score:
     out = stream.Score()
     part = stream.Part()
     part.insert(0, clef.TrebleClef())
+    # Preserve the source key signature so accidentals round-trip correctly.
+    ks = top.recurse().getElementsByClass("KeySignature").first()
+    if ks is not None and ks.sharps:
+        part.insert(0, key.KeySignature(int(ks.sharps)))
     part.insert(0, meter.TimeSignature("4/4"))
     for n in top.flatten().notes:
         pitch = max(n.pitches, key=lambda p: p.midi) if isinstance(n, chord.Chord) else n.pitch

@@ -92,6 +92,48 @@ def test_blank_page_yields_no_notes():
     assert recognized.notes == []
 
 
+def _keyed_phrase(midis, sharps):
+    """Build a single-staff phrase with an explicit key signature."""
+    from music21 import clef, key, meter, note, stream
+
+    score = stream.Score()
+    part = stream.Part()
+    part.insert(0, clef.TrebleClef())
+    part.insert(0, key.KeySignature(sharps))
+    part.insert(0, meter.TimeSignature("4/4"))
+    for i, m in enumerate(midis):
+        n = note.Note(m)
+        n.quarterLength = 1.0
+        part.insert(float(i), n)
+    score.insert(0, part)
+    score.makeNotation(inPlace=True)
+    return score
+
+
+def test_detects_key_signature_and_applies_sharps():
+    # D major (2 sharps: F#, C#). Notes on the F and C staff positions must be
+    # read as F# / C# via the detected key signature.
+    score = _keyed_phrase([66, 69, 73, 74, 73, 69, 66, 62], sharps=2)  # F#4..D5 line
+    recognized = recognize_image(render_reference_array(score))
+    assert recognized.key_sharps == 2
+    assert [n.pitch for n in recognized.notes] == [66, 69, 73, 74, 73, 69, 66, 62]
+
+
+def test_detects_flat_key_signature():
+    # B-flat major (2 flats: B, E).
+    score = _keyed_phrase([65, 67, 70, 72, 70, 67, 65, 63], sharps=-2)
+    recognized = recognize_image(render_reference_array(score))
+    assert recognized.key_sharps == -2
+    assert [n.pitch for n in recognized.notes] == [65, 67, 70, 72, 70, 67, 65, 63]
+
+
+def test_no_false_key_signature_on_natural_phrase():
+    # A natural-only phrase has no key signature and must not gain one.
+    recognized = recognize_image(render_reference_array(make_phrase(C_MAJOR_SCALE)))
+    assert recognized.key_sharps == 0
+    assert [n.pitch for n in recognized.notes] == C_MAJOR_SCALE
+
+
 # --------------------------------------------------------------------------- #
 # Metrics
 # --------------------------------------------------------------------------- #

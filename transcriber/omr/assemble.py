@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 
-from music21 import clef, instrument, meter, note, stream
+from music21 import clef, instrument, key, meter, note, stream
 
 from .types import OMRNote, RecognizedScore
 
@@ -63,6 +63,7 @@ def build_score(
             by_staff[staff_idx],
             time_signature=time_signature,
             clef_name=clefs.get(staff_idx, "treble" if staff_idx == 1 else "bass"),
+            key_sharps=recognized.key_sharps,
         )
         score.insert(0, part)
 
@@ -71,10 +72,14 @@ def build_score(
     return score
 
 
-def _build_part(notes: list[OMRNote], time_signature: str, clef_name: str) -> stream.Part:
+def _build_part(
+    notes: list[OMRNote], time_signature: str, clef_name: str, key_sharps: int = 0
+) -> stream.Part:
     part = stream.Part()
     part.insert(0, instrument.Piano())
     part.insert(0, _CLEF_OBJECTS.get(clef_name, clef.TrebleClef)())
+    if key_sharps:
+        part.insert(0, key.KeySignature(key_sharps))
     part.insert(0, meter.TimeSignature(time_signature))
 
     placed = 0

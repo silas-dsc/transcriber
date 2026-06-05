@@ -45,6 +45,19 @@ _CLEF_BOTTOM_DIATONIC = {
 # Alto clef bottom line is F3; override explicitly to avoid confusion.
 _CLEF_BOTTOM_DIATONIC["alto"] = 3 * 7 + 3  # F3
 
+# Order in which sharps / flats are added to a key signature (circle of fifths).
+_SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"]
+_FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"]
+
+
+def key_alteration_map(sharps: int) -> dict[str, int]:
+    """Map a signed key-signature size to ``{letter: +1/-1}`` alterations."""
+    if sharps > 0:
+        return {letter: 1 for letter in _SHARP_ORDER[:sharps]}
+    if sharps < 0:
+        return {letter: -1 for letter in _FLAT_ORDER[: -sharps]}
+    return {}
+
 
 @dataclass
 class PrimitiveConfig:
@@ -77,11 +90,14 @@ def recognize_image(image: np.ndarray, config: PrimitiveConfig | None = None) ->
         return RecognizedScore(notes=[], systems=[], page_count=1)
 
     staff_space = float(np.median([s.staff_space for s in staves]))
-    heads = _detect_heads(mask, staves, staff_space, config)
+    key_sharps, keysig_x = detect_key_signature(mask, staves, staff_space)
+    heads = _detect_heads(mask, staves, staff_space, config, min_x=keysig_x)
 
-    notes = _heads_to_notes(heads, staves, config)
-    logger.info("Primitive OMR: %d staves, %d notes", len(staves), len(notes))
-    return RecognizedScore(notes=notes, systems=staves, page_count=1)
+    notes = _heads_to_notes(heads, staves, config, key_sharps=key_sharps)
+    logger.info(
+        "Primitive OMR: %d staves, %d notes, key=%+d", len(staves), len(notes), key_sharps
+    )
+    return RecognizedScore(notes=notes, systems=staves, page_count=1, key_sharps=key_sharps)
 
 
 # --------------------------------------------------------------------------- #
@@ -200,6 +216,7 @@ def _detect_heads(
     staves: list[StaffSystem],
     staff_space: float,
     config: PrimitiveConfig,
+    min_x: float = 0.0,
 ) -> list[_Head]:
     # Two complementary detectors catch the two kinds of note head:
     #
@@ -211,10 +228,94 @@ def _detect_heads(
     #    in the *original* mask the ring is still a closed loop enclosing a small
     #    white hole, so we find hollow heads as enclosed holes instead -- which
     #    is robust to whatever the staff lines do.
-    heads = _detect_filled_heads(mask, staves, staff_space, config)
-    heads += _detect_hollow_heads(mask, staves, staff_space, heads)
+    heads = _detect_filled_heads(mask, staves, staff_space, config, min_x)
+    heads += _detect_hollow_heads(mask, staves, staff_space, heads, min_x)
     heads.sort(key=lambda hd: (hd.staff_index, hd.x))
     return heads
+
+
+def detect_key_signature(
+    mask: np.ndarray, staves: list[StaffSystem], staff_space: float
+) -> tuple[int, float]:
+    """Detect the key signature from accidental glyphs after the clef.
+
+    Returns ``(signed_count, region_right_x)``: a positive count for sharps, a
+    negative count for flats, and the x past which note heads begin.  Key
+    signatures use a fixed number of accidentals in a fixed circle-of-fifths
+    order, so counting the glyphs and classifying them sharp-vs-flat is enough
+    to reconstruct which pitches are altered -- their exact positions are not
+    needed.
+    """
+    if not staves:
+        return 0, 0.0
+    staff = staves[0]
+    no_lines = _remove_staff_lines(mask, staves, staff_space)
+    labels, n = ndimage.label(no_lines)
+    if n == 0:
+        return 0, 0.0
+
+    top = staff.top_line_y - 1.5 * staff_space
+    bot = staff.bottom_line_y + 1.5 * staff_space
+    glyphs: list[tuple[float, slice, int]] = []  # (cx, slice, label)
+    for idx, sl in enumerate(ndimage.find_objects(labels), start=1):
+        if sl is None:
+            continue
+        ys, xs = sl
+        h, w = ys.stop - ys.start, xs.stop - xs.start
+        cy, cx = (ys.start + ys.stop - 1) / 2.0, (xs.start + xs.stop - 1) / 2.0
+        # Accidental glyphs are tall and narrow, and sit on the staff.
+        if not (1.1 * staff_space <= h <= 2.8 * staff_space and 0.2 * staff_space <= w <= 1.1 * staff_space):
+            continue
+        if (w / h) >= 0.8 or not (top <= cy <= bot):
+            continue
+        # A real sharp/flat has a tall vertical stroke; a staff-line-removal
+        # edge stub is horizontal fragments with no tall column.  Require the
+        # densest column to span most of the glyph height.
+        component = labels[sl] == idx
+        if int(component.sum(axis=0).max()) < 0.55 * h:
+            continue
+        glyphs.append((cx, sl, idx))
+
+    glyphs.sort(key=lambda g: g[0])
+    # Keep the leftmost contiguous cluster that begins right after the clef.
+    cluster: list[tuple[float, slice, int]] = []
+    for g in glyphs:
+        if not cluster:
+            if g[0] > staff.x_start + 3.0 * staff_space:
+                break  # first glyph is too far right to be a key signature
+            cluster.append(g)
+        elif g[0] - cluster[-1][0] <= 1.8 * staff_space:
+            cluster.append(g)
+        else:
+            break
+    if not cluster:
+        return 0, 0.0
+
+    # Classify sharp vs flat by where the ink sits: a flat's filled bowl makes
+    # the bottom third far heavier than the top (thin ascender); a sharp is
+    # vertically balanced.  The bottom/top ink ratio separates them cleanly
+    # (~1.1-1.8 for sharps vs ~3.4-4.3 for flats).
+    ratios = []
+    for _, sl, idx in cluster:
+        comp = labels[sl] == idx
+        h = comp.shape[0]
+        top_ink = int(comp[: h // 3, :].sum())
+        bot_ink = int(comp[2 * h // 3 :, :].sum())
+        ratios.append(bot_ink / max(top_ink, 1))
+    is_flat = float(np.median(ratios)) > 2.5
+
+    count = len(cluster)
+    region_right_x = cluster[-1][0] + 0.8 * staff_space
+    return (-count if is_flat else count), region_right_x
+
+
+def _is_head_shaped(h: float, w: float, staff_space: float) -> bool:
+    """A note head is about as wide as it is tall; accidentals are tall+narrow."""
+    if h <= 0 or w <= 0:
+        return False
+    # Reject tall-narrow glyphs (sharps/flats/naturals): width must be a decent
+    # fraction of height.
+    return (w / h) >= 0.8
 
 
 def _detect_filled_heads(
@@ -222,6 +323,7 @@ def _detect_filled_heads(
     staves: list[StaffSystem],
     staff_space: float,
     config: PrimitiveConfig,
+    min_x: float = 0.0,
 ) -> list[_Head]:
     no_lines = _remove_staff_lines(mask, staves, staff_space)
     seal = _disk(max(2, int(round(staff_space * 0.16))))
@@ -243,12 +345,16 @@ def _detect_filled_heads(
         h, w = ys.stop - ys.start, xs.stop - xs.start
         if not (min_h <= h <= max_h and min_w <= w <= max_w):
             continue
+        if not _is_head_shaped(h, w, staff_space):
+            continue
         component = labels[sl] == idx
         area = int(component.sum())
         if area < 0.25 * staff_space * staff_space:
             continue
         cy = (ys.start + ys.stop - 1) / 2.0
         cx = (xs.start + xs.stop - 1) / 2.0
+        if cx < min_x:  # inside the key-signature / clef region
+            continue
         staff_idx = _nearest_staff(cy, cx, staves)
         if staff_idx is None:
             continue
@@ -267,6 +373,7 @@ def _detect_hollow_heads(
     staves: list[StaffSystem],
     staff_space: float,
     existing: list[_Head],
+    min_x: float = 0.0,
 ) -> list[_Head]:
     """Find hollow heads as small enclosed holes in the original ink mask."""
     holes = ndimage.binary_fill_holes(mask) & ~mask
@@ -276,7 +383,7 @@ def _detect_hollow_heads(
 
     heads: list[_Head] = []
     min_h, max_h = 0.35 * staff_space, 1.1 * staff_space
-    min_w, max_w = 0.35 * staff_space, 1.4 * staff_space
+    min_w, max_w = 0.45 * staff_space, 1.4 * staff_space
     for idx, sl in enumerate(ndimage.find_objects(labels), start=1):
         if sl is None:
             continue
@@ -284,8 +391,12 @@ def _detect_hollow_heads(
         h, w = ys.stop - ys.start, xs.stop - xs.start
         if not (min_h <= h <= max_h and min_w <= w <= max_w):
             continue
+        if w < h:  # a hollow head's hole is wider than tall; sharp squares are not
+            continue
         cy = (ys.start + ys.stop - 1) / 2.0
         cx = (xs.start + xs.stop - 1) / 2.0
+        if cx < min_x:
+            continue
         # Skip holes already explained by a detected (filled) head nearby.
         if any(abs(cx - e.x) < 0.8 * staff_space and abs(cy - e.y) < 0.8 * staff_space for e in existing):
             continue
@@ -343,8 +454,10 @@ def _heads_to_notes(
     heads: list[_Head],
     staves: list[StaffSystem],
     config: PrimitiveConfig,
+    key_sharps: int = 0,
 ) -> list[OMRNote]:
     clefs = config.clefs or {}
+    key_alter = key_alteration_map(key_sharps)
     notes: list[OMRNote] = []
     onset_by_staff: dict[int, float] = {}
 
@@ -352,16 +465,23 @@ def _heads_to_notes(
         staff = staves[head.staff_index]
         clef_name = clefs.get(head.staff_index + 1, config.default_clef)
         step = staff.step_at(head.y)
-        pitch = _step_to_midi(step, clef_name)
+        midi, letter = _step_to_pitch(step, clef_name)
+        # A note head with no explicit accidental inherits the key signature.
+        accidental = None
+        alter = key_alter.get(letter, 0)
+        if alter:
+            midi += alter
+            accidental = "sharp" if alter > 0 else "flat"
         duration = 1.0 if head.filled else 2.0
         onset = onset_by_staff.get(head.staff_index, 0.0)
         notes.append(
             OMRNote(
-                pitch=pitch,
+                pitch=int(np.clip(midi, 0, 127)),
                 onset=onset,
                 duration=duration,
                 voice=1,
                 staff=head.staff_index + 1,
+                accidental=accidental,
             )
         )
         onset_by_staff[head.staff_index] = onset + duration
@@ -369,14 +489,19 @@ def _heads_to_notes(
     return notes
 
 
-def _step_to_midi(step: int, clef: str) -> int:
-    """Map a diatonic staff step (0 = bottom line) to a MIDI pitch."""
+def _step_to_pitch(step: int, clef: str) -> tuple[int, str]:
+    """Map a diatonic staff step (0 = bottom line) to (natural MIDI, letter)."""
     bottom = _CLEF_BOTTOM_DIATONIC.get(clef, _CLEF_BOTTOM_DIATONIC["treble"])
     diatonic = bottom + step
     octave, letter_idx = divmod(diatonic, 7)
     letter = "CDEFGAB"[letter_idx]
     midi = 12 * (octave + 1) + _LETTER_SEMITONE[letter]
-    return int(np.clip(midi, 0, 127))
+    return int(np.clip(midi, 0, 127)), letter
+
+
+def _step_to_midi(step: int, clef: str) -> int:
+    """Map a diatonic staff step (0 = bottom line) to a MIDI pitch."""
+    return _step_to_pitch(step, clef)[0]
 
 
 def _disk(radius: int) -> np.ndarray:

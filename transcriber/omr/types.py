@@ -88,3 +88,4 @@ class RecognizedScore:
     systems: list[StaffSystem] = field(default_factory=list)
     page_count: int = 1
     title: str = "Optical transcription"
+    key_sharps: int = 0  # signed key signature: +N sharps, -N flats
