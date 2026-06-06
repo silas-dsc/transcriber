@@ -58,6 +58,43 @@ def score_to_tokens(score) -> list[str]:
     return toks
 
 
+def tokens_to_score(tokens: list[str]):
+    """Inverse of :func:`score_to_tokens`: rebuild a music21 score from tokens.
+
+    Used at evaluation time to turn a model's predicted token string back into a
+    score that this repo's metrics (``compare_scores`` / ``compare_chords``) can
+    grade.  Unknown/garbled tokens are skipped.
+    """
+    from music21 import clef, harmony, key, meter, note, stream
+
+    score = stream.Score()
+    part = stream.Part()
+    part.insert(0, clef.TrebleClef())
+    offset = 0.0
+    for tok in tokens:
+        try:
+            if tok.startswith("key_"):
+                part.insert(0, key.KeySignature(int(tok[4:])))
+            elif tok.startswith("time_"):
+                part.insert(0, meter.TimeSignature(tok[5:]))
+            elif tok.startswith("chord_"):
+                part.insert(offset, harmony.ChordSymbol(tok[6:]))
+            elif tok.startswith("rest_"):
+                r = note.Rest(quarterLength=float(tok[5:]))
+                part.insert(offset, r)
+                offset += r.quarterLength
+            elif tok.startswith("note_"):
+                _, name, ql = tok.split("_", 2)
+                n = note.Note(name)
+                n.quarterLength = float(ql)
+                part.insert(offset, n)
+                offset += n.quarterLength
+        except Exception:
+            continue  # skip a malformed predicted token, keep decoding
+    score.insert(0, part)
+    return score
+
+
 def build_corpus(
     items,
     out_dir: str | Path,

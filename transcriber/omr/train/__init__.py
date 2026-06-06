@@ -11,6 +11,6 @@ Actual model training (a GPU job) lives outside this repo; see
 own segmentation fine-tune is the harder option.
 """
 
-from .corpus import build_corpus, score_to_tokens
+from .corpus import build_corpus, score_to_tokens, tokens_to_score
 
-__all__ = ["build_corpus", "score_to_tokens"]
+__all__ = ["build_corpus", "score_to_tokens", "tokens_to_score"]

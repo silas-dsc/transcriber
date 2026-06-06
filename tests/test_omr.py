@@ -655,3 +655,15 @@ def test_openscore_lieder_corpus_fetches_real_scores():
         pytest.skip(f"network/MuseScore unavailable: {exc}")
     assert items, "expected at least one Lieder score"
     assert list(items[0].score.flatten().notes), "score should contain notes"
+
+
+def test_tokens_round_trip_reconstructs_notes_and_chords():
+    from transcriber.omr.train import score_to_tokens, tokens_to_score
+    from transcriber.omr.eval.datasets import make_lead_sheet
+    from transcriber.omr.eval.metrics import compare_chords, compare_scores
+
+    ref = make_lead_sheet([60, 62, 64, 65, 67, 69, 71, 72],
+                          chords=[(0.0, "Cmaj7"), (4.0, "Am7")])
+    rebuilt = tokens_to_score(score_to_tokens(ref))
+    assert compare_scores(ref, rebuilt).f1 == 1.0
+    assert compare_chords(ref, rebuilt).f1 == 1.0
