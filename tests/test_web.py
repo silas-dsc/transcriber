@@ -54,3 +54,32 @@ def test_transcribe_returns_musicxml(mix_audio, sample_rate, tmp_path):
 def test_find_free_port_returns_valid_port():
     port = _find_free_port()
     assert 1024 <= port <= 65535
+
+
+def test_convert_accepts_sheet_music_image_and_returns_musicxml():
+    # Render a known phrase to a PNG, upload it to /convert (OMR path).
+    from transcriber.omr.eval.datasets import make_phrase
+    from transcriber.omr.eval.render_ref import render_reference
+
+    png = render_reference(make_phrase([60, 62, 64, 65, 67]), _png_tmp())
+    resp = client.post(
+        "/convert",
+        files={"file": ("scale.png", io.BytesIO(png.read_bytes()), "image/png")},
+        data={"engine": "primitive"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.content.startswith(b"<?xml")
+    assert b"score-partwise" in resp.content
+    assert resp.headers["content-disposition"].endswith('filename="scale.musicxml"')
+
+
+def test_convert_rejects_unsupported_type():
+    resp = client.post("/convert", files={"file": ("x.txt", b"nope", "text/plain")})
+    assert resp.status_code == 400
+
+
+def _png_tmp():
+    import tempfile
+    from pathlib import Path
+
+    return Path(tempfile.mkdtemp()) / "scale.png"

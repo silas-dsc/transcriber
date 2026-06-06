@@ -105,7 +105,10 @@ score = result.score          # a music21 Score you can manipulate further
 
 ### Web interface
 
-A small browser app (upload audio → download MusicXML) is included:
+A small browser app is included. It accepts **either an audio recording or a
+picture of sheet music (PDF / image)** and returns MusicXML — the UI shows the
+relevant options for whichever you upload, and the backend auto-routes audio to
+the transcription pipeline and PDFs/images to the OMR pipeline.
 
 ```bash
 pip install -e ".[web]"     # adds fastapi + uvicorn
@@ -114,8 +117,15 @@ transcriber-web             # auto-selects a free port and prints the URL
 transcriber-web --port 8000  # or pick your own port
 ```
 
-Then open the printed `http://127.0.0.1:<port>` URL, choose a file and the
-back-ends, and the score downloads when it's ready.
+Open the printed `http://127.0.0.1:<port>` URL, choose a file, and the score
+downloads when it's ready. The HTTP API is one endpoint — `POST /convert` with
+a `file` field (audio or PDF/image) returns the MusicXML; CORS is enabled so a
+separately-hosted static frontend can call it.
+
+**Hosting it for free:** `frontend/index.html` is a standalone static page for
+**GitHub Pages**, and the `Dockerfile` runs the backend on **Hugging Face
+Spaces** / Render / Fly / Cloud Run. Step-by-step instructions (including
+pushing to your own GitHub account) are in **[HOSTING.md](HOSTING.md)**.
 
 ### Try the bundled demo
 
@@ -311,7 +321,7 @@ transcriber/
   score.py        # music21 score assembly + MusicXML export
   pipeline.py     # orchestration
   cli.py          # command-line interface
-  web.py          # FastAPI browser upload UI
+  web.py          # FastAPI upload UI + API (audio OR pdf/image -> MusicXML)
   omr/            # optical music recognition (image/PDF -> MusicXML)
     rendering.py    # PDF/image -> page bitmaps (pypdfium2)
     preprocess.py   # binarise / deskew / denoise
@@ -325,6 +335,10 @@ transcriber/
     pipeline.py     # orchestration
     cli.py          # `omr` command
     eval/           # accuracy harness: metrics, renderers, datasets
+    confidence.py   # confidence scoring + human-in-the-loop review queue
+frontend/         # static web UI for GitHub Pages (calls the backend API)
+Dockerfile        # backend container (Hugging Face Spaces / Render / Fly / ...)
+HOSTING.md        # free deployment guide (Pages frontend + Spaces backend)
 tests/            # pytest suite (runs on the core deps only)
 examples/         # bundled synthetic demo recording
 ```
