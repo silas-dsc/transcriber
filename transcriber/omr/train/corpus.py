@@ -119,16 +119,28 @@ def build_corpus(
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    from ..eval.datasets import music21_corpus, synthetic_corpus, synthetic_lead_sheet_corpus
+    from ..eval.datasets import (
+        music21_corpus,
+        openscore_lieder_corpus,
+        synthetic_corpus,
+        synthetic_lead_sheet_corpus,
+    )
 
     p = argparse.ArgumentParser(
         prog="omr-build-corpus",
         description="Render a jazz-font OMR training corpus from MusicXML.",
     )
-    p.add_argument("--dataset", choices=["synthetic", "leadsheet", "music21"], default="leadsheet")
+    p.add_argument(
+        "--dataset",
+        choices=["synthetic", "leadsheet", "music21", "openscore-lieder"],
+        default="leadsheet",
+        help="Source scores. 'openscore-lieder' fetches real CC0 scores from "
+        "the OpenScore Lieder GitHub mirror (needs network + MuseScore CLI).",
+    )
     p.add_argument("--query", default="bach", help="Composer/query for the music21 corpus.")
     p.add_argument("--limit", type=int, default=20)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--cache-dir", default=None, help="Download cache for openscore-lieder.")
     p.add_argument("--renderer", default="musescore", choices=["musescore", "verovio", "builtin"])
     p.add_argument("--style", default="MuseJazz", help="MuseScore style (e.g. MuseJazz).")
     p.add_argument("--font", default=None, help="verovio SMuFL font (e.g. Petaluma).")
@@ -142,6 +154,8 @@ def main(argv: list[str] | None = None) -> int:
         items = synthetic_corpus(n_items=args.limit, seed=args.seed)
     elif args.dataset == "leadsheet":
         items = synthetic_lead_sheet_corpus(n_items=args.limit, seed=args.seed)
+    elif args.dataset == "openscore-lieder":
+        items = openscore_lieder_corpus(limit=args.limit, cache_dir=args.cache_dir)
     else:
         items = music21_corpus(query=args.query, limit=args.limit)
 

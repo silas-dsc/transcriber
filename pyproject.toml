@@ -84,6 +84,7 @@ transcriber = "transcriber.cli:main"
 transcriber-web = "transcriber.web:main"
 omr = "transcriber.omr.cli:main"
 omr-eval = "transcriber.omr.eval.cli:main"
+omr-build-corpus = "transcriber.omr.train.corpus:main"
 
 [project.urls]
 Homepage = "https://github.com/silas-dsc/transcriber"

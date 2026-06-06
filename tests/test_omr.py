@@ -637,3 +637,21 @@ def test_build_corpus_writes_image_label_pairs(tmp_path):
         assert any(t.startswith("note_") for t in rec["tokens"])
     # the token target captures chord symbols (the jazz payload), not just notes
     assert any(t.startswith("chord_") for t in score_to_tokens(items[0].score))
+
+
+def test_openscore_lieder_corpus_fetches_real_scores():
+    """Integration: fetch one real CC0 score from the OpenScore Lieder mirror.
+    Skips cleanly without network or the MuseScore CLI."""
+    import urllib.error
+
+    from transcriber.omr.eval.datasets import openscore_lieder_corpus
+    from transcriber.omr.eval.render_ref import _find_musescore
+
+    if _find_musescore() is None:
+        pytest.skip("needs the MuseScore CLI")
+    try:
+        items = openscore_lieder_corpus(limit=1)
+    except (urllib.error.URLError, RuntimeError, OSError) as exc:
+        pytest.skip(f"network/MuseScore unavailable: {exc}")
+    assert items, "expected at least one Lieder score"
+    assert list(items[0].score.flatten().notes), "score should contain notes"

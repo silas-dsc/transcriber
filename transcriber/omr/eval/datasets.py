@@ -256,3 +256,84 @@ def synthetic_lead_sheet_corpus(
             CorpusItem(id=f"leadsheet_{i:03d}", score=make_lead_sheet(pitches, chords=chords))
         )
     return items
+
+
+# --------------------------------------------------------------------------- #
+# OpenScore Lieder -- real CC0 scores from the GitHub mirror
+# --------------------------------------------------------------------------- #
+# NB: there is no "OpenScore Lead Sheets" corpus -- OpenScore ships only Lieder
+# (19th-century art songs: melody + piano) and StringQuartets, both CC0.  No
+# open jazz lead-sheet corpus exists (jazz standards are under copyright).  Use
+# Lieder for real engraving content to render in the jazz font; pair with
+# synthetic_lead_sheet_corpus() for chord-symbol coverage, or supply your own
+# jazz MusicXML.  Scores are stored as MuseScore .mscx and converted to
+# MusicXML with the MuseScore CLI.
+_LIEDER_TREE_API = "https://api.github.com/repos/OpenScore/Lieder/git/trees/main?recursive=1"
+_LIEDER_RAW = "https://raw.githubusercontent.com/OpenScore/Lieder/main/"
+
+
+def _omr_cache_dir(cache_dir=None) -> Path:
+    base = Path(cache_dir) if cache_dir else Path.home() / ".cache" / "transcriber-omr"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _http_get(url: str, binary: bool = False):
+    import urllib.parse
+    import urllib.request
+
+    safe_url = urllib.parse.quote(url, safe="/:?=&%")
+    req = urllib.request.Request(safe_url, headers={"User-Agent": "transcriber-omr"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = resp.read()
+    return data if binary else data.decode("utf-8")
+
+
+def openscore_lieder_corpus(limit: int = 20, cache_dir=None) -> list[CorpusItem]:
+    """Fetch real CC0 scores from the OpenScore Lieder GitHub mirror.
+
+    Downloads up to ``limit`` MuseScore ``.mscx`` files, converts each to
+    MusicXML with the MuseScore CLI, parses with music21, and caches both.
+    Requires network access and the MuseScore CLI.
+
+    These are classical art songs, not jazz lead sheets (no open jazz
+    lead-sheet corpus exists).  They provide real engraving content for the
+    jazz-font render/train pipeline; combine with synthetic_lead_sheet_corpus()
+    for chord symbols.
+    """
+    import json
+
+    from music21 import converter
+
+    from .render_ref import _find_musescore, _run_musescore
+
+    ms = _find_musescore()
+    if ms is None:
+        raise RuntimeError(
+            "openscore_lieder_corpus needs the MuseScore CLI to convert .mscx -> MusicXML"
+        )
+    cache = _omr_cache_dir(cache_dir) / "lieder"
+    cache.mkdir(parents=True, exist_ok=True)
+
+    tree = json.loads(_http_get(_LIEDER_TREE_API))
+    paths = sorted(
+        e["path"] for e in tree.get("tree", []) if e.get("path", "").endswith(".mscx")
+    )
+    items: list[CorpusItem] = []
+    for path in paths:
+        if len(items) >= limit:
+            break
+        stem = path.rsplit("/", 1)[-1][:-5]  # "lc<id>"
+        mscx, mxl = cache / f"{stem}.mscx", cache / f"{stem}.musicxml"
+        try:
+            if not mscx.exists():
+                mscx.write_bytes(_http_get(_LIEDER_RAW + path, binary=True))
+            if not mxl.exists() and not _run_musescore(ms, [str(mscx), "-o", str(mxl)]):
+                continue
+            score = converter.parse(str(mxl))
+        except Exception as exc:  # skip unreadable scores, keep going
+            logger.warning("skipping Lieder %s: %s", stem, exc)
+            continue
+        items.append(CorpusItem(id=stem, score=score))
+    logger.info("loaded %d/%d OpenScore Lieder scores (cache=%s)", len(items), limit, cache)
+    return items
