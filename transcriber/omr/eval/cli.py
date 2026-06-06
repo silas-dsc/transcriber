@@ -30,6 +30,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--query", default="bach", help="Composer/query for the music21 corpus.")
     parser.add_argument("--limit", type=int, default=8, help="Max items to evaluate.")
+    parser.add_argument(
+        "--offset", type=int, default=0,
+        help="Skip the first N corpus items (run item i in isolation with "
+        "--offset i --limit 1, e.g. for memory-isolated per-item benchmarking).",
+    )
     parser.add_argument("--notes", type=int, default=10, help="Notes per synthetic phrase.")
     parser.add_argument("--seed", type=int, default=0, help="Synthetic RNG seed.")
     parser.add_argument(
@@ -81,9 +86,12 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.dataset == "synthetic":
-        items = synthetic_corpus(n_items=args.limit, notes_per_item=args.notes, seed=args.seed)
+        items = synthetic_corpus(
+            n_items=args.offset + args.limit, notes_per_item=args.notes, seed=args.seed
+        )
     else:
-        items = music21_corpus(query=args.query, limit=args.limit)
+        items = music21_corpus(query=args.query, limit=args.offset + args.limit)
+    items = items[args.offset : args.offset + args.limit]
 
     if not items:
         print("error: no corpus items to evaluate", file=sys.stderr)

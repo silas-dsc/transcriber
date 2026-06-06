@@ -589,3 +589,29 @@ def test_recognize_chords_without_ocr_returns_empty():
     if _ocr_backend() is not None:
         pytest.skip("an OCR backend is installed; this guards the no-OCR path")
     assert recognize_chords(np.ones((80, 200), dtype=np.float32), []) == []
+
+
+def test_chord_ocr_reads_musejazz_roots_when_available(tmp_path):
+    """With tesseract + MuseScore present, the chord OCR recognises at least
+    one chord root off a MuseJazz lead-sheet render. Extensions (superscript 7)
+    are not asserted -- off-the-shelf OCR loses most of them."""
+    pytest.importorskip("pytesseract")
+    import numpy as np
+    from PIL import Image
+
+    from transcriber.omr.chords import recognize_chords, _ocr_backend
+    from transcriber.omr.eval.render_ref import _find_musescore, render_reference
+    from transcriber.omr.eval.datasets import make_lead_sheet
+    from transcriber.omr.preprocess import preprocess, PreprocessConfig
+    from transcriber.omr.primitive import detect_staves
+
+    if _ocr_backend() is None or _find_musescore() is None:
+        pytest.skip("needs a tesseract OCR backend + the MuseScore CLI")
+    ref = make_lead_sheet([60, 62, 64, 65, 67, 69, 71, 72],
+                          chords=[(0.0, "Cmaj7"), (4.0, "Am7")])
+    p = render_reference(ref, tmp_path / "ls.png", renderer="musescore", style="MuseJazz", dpi=300)
+    arr = np.asarray(Image.open(p).convert("L"), dtype=np.float32) / 255.0
+    systems = detect_staves(preprocess(arr, PreprocessConfig(deskew=False)))
+    chords = recognize_chords(arr, systems, beats_per_system=8.0)
+    roots = {c.figure[:1] for c in chords}
+    assert roots & {"C", "A"}, f"no expected chord root recognised; got {roots}"

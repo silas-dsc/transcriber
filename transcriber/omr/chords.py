@@ -101,11 +101,21 @@ def _ocr_backend() -> str | None:
     return None
 
 
+# OCR tuning (measured on MuseJazz renders): chord text sits ~1-5.5 staff
+# spaces above the top line; tesseract reads it far better at 2x + binarised,
+# and a chord-character whitelist stops it emitting punctuation for glyphs it
+# is unsure of.  Superscript extensions (the small raised 7/9/13) are still
+# largely lost -- roots and base qualities (maj/m) come through reliably.
+_OCR_CHARS = "ABCDEFGabcdefg#b-+0123456789majminMsusdio"
+_BAND_TOP_SPACES = 5.5
+_BAND_BOTTOM_SPACES = 0.5
+
+
 def _crop_chord_band(image: np.ndarray, system: StaffSystem) -> np.ndarray | None:
     """Crop the band just above a staff, where chord symbols are printed."""
     space = system.staff_space or 10.0
-    y0 = max(0, int(system.top_line_y - 3.0 * space))
-    y1 = max(0, int(system.top_line_y - 0.3 * space))
+    y0 = max(0, int(system.top_line_y - _BAND_TOP_SPACES * space))
+    y1 = max(0, int(system.top_line_y - _BAND_BOTTOM_SPACES * space))
     x0 = max(0, int(system.x_start))
     x1 = min(image.shape[1], int(system.x_end))
     if y1 <= y0 or x1 <= x0:
@@ -127,13 +137,19 @@ def _ocr_band(band: np.ndarray, backend: str) -> list[tuple[str, float]]:
         import pytesseract
         from PIL import Image
 
-        data = pytesseract.image_to_data(
-            Image.fromarray(band), output_type=pytesseract.Output.DICT
-        )
+        # 2x upscale + binarise + chord whitelist markedly improves recognition
+        # of the small handwritten chord text (measured on MuseJazz renders).
+        scale = 2
+        im = Image.fromarray(band).resize(
+            (band.shape[1] * scale, band.shape[0] * scale), Image.LANCZOS
+        ).point(lambda p: 0 if p < 160 else 255)
+        cfg = f"--psm 11 -c tessedit_char_whitelist={_OCR_CHARS}"
+        data = pytesseract.image_to_data(im, config=cfg, output_type=pytesseract.Output.DICT)
+        scaled_w = band.shape[1] * scale or 1
         toks = []
         for i, txt in enumerate(data["text"]):
             if txt.strip():
-                xc = (data["left"][i] + data["width"][i] / 2.0) / width
+                xc = (data["left"][i] + data["width"][i] / 2.0) / scaled_w
                 toks.append((txt.strip(), xc))
         return toks
     if backend == "easyocr":  # pragma: no cover - heavy optional dep
