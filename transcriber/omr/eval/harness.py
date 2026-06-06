@@ -37,6 +37,7 @@ class HarnessResult:
     font: str | None = None
     style: str | None = None
     augmentation: str = "clean"
+    n_failed: int = 0
 
     @property
     def n_items(self) -> int:
@@ -101,15 +102,24 @@ def evaluate_corpus(
     with tempfile.TemporaryDirectory(prefix="omr_eval_") as tmp:
         tmpdir = Path(tmp)
         for item in items:
-            image = render_reference(
-                item.score, tmpdir / f"{item.id}.png",
-                renderer=renderer, font=font, style=style, dpi=dpi,
-            )
-            if augmentation != "clean":
-                image = _augment_file(image, augmentation)
-            config = OMRConfig(engine=engine, dpi=dpi, time_signature=time_signature)
-            recognized = recognize(image, output_path=None, config=config)
-            comparison = compare_scores(item.score, recognized.score)
+            try:
+                image = render_reference(
+                    item.score, tmpdir / f"{item.id}.png",
+                    renderer=renderer, font=font, style=style, dpi=dpi,
+                )
+                if augmentation != "clean":
+                    image = _augment_file(image, augmentation)
+                config = OMRConfig(engine=engine, dpi=dpi, time_signature=time_signature)
+                recognized = recognize(image, output_path=None, config=config)
+                comparison = compare_scores(item.score, recognized.score)
+            except Exception as exc:
+                # A page the engine cannot read (engine crash, render failure)
+                # is a recognition failure, not a reason to abort the whole
+                # benchmark -- which matters most on the hard handwritten /
+                # scanned inputs we want to measure.  Record it as a zero.
+                logger.warning("%s: recognition failed (%s); scoring as 0", item.id, exc)
+                result.n_failed += 1
+                comparison = _failed_comparison(item.score)
             result.per_item.append((item.id, comparison))
             logger.info(
                 "%s: F1=%.3f SER=%.3f (ref=%d pred=%d)",
@@ -120,6 +130,18 @@ def evaluate_corpus(
                 comparison.n_predicted,
             )
     return result
+
+
+def _failed_comparison(reference) -> ScoreComparison:
+    """A zero-score comparison for an item the engine could not recognise."""
+    from .metrics import score_to_events
+
+    n_ref = len(score_to_events(reference))
+    return ScoreComparison(
+        precision=0.0, recall=0.0, f1=0.0, symbol_error_rate=1.0,
+        duration_accuracy=0.0, onset_accuracy=0.0, mv2h_lite=0.0,
+        n_reference=n_ref, n_predicted=0, n_matched=0,
+    )
 
 
 def _augment_file(image_path: Path, preset: str) -> Path:
@@ -158,4 +180,9 @@ def format_report(result: HarnessResult) -> str:
         f"Precision {result.mean_precision:.3f}   Recall {result.mean_recall:.3f}   "
         f"F1 {result.mean_f1:.3f}   SER {result.mean_ser:.3f}",
     ]
+    if result.n_failed:
+        lines.append(
+            f"NOTE: {result.n_failed}/{result.n_items} item(s) failed recognition "
+            f"(scored as 0) -- the engine could not read them."
+        )
     return "\n".join(lines)
