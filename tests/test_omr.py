@@ -615,3 +615,25 @@ def test_chord_ocr_reads_musejazz_roots_when_available(tmp_path):
     chords = recognize_chords(arr, systems, beats_per_system=8.0)
     roots = {c.figure[:1] for c in chords}
     assert roots & {"C", "A"}, f"no expected chord root recognised; got {roots}"
+
+
+# --------------------------------------------------------------------------- #
+# Training-corpus generation (jazz-font OMR)
+# --------------------------------------------------------------------------- #
+def test_build_corpus_writes_image_label_pairs(tmp_path):
+    import json
+
+    from transcriber.omr.train import build_corpus, score_to_tokens
+    from transcriber.omr.eval.datasets import synthetic_lead_sheet_corpus
+
+    items = synthetic_lead_sheet_corpus(n_items=2, bars=2, seed=3)
+    # builtin renderer keeps the test fast and dependency-free (no MuseScore).
+    manifest = build_corpus(items, tmp_path, renderer="builtin")
+    records = [json.loads(line) for line in open(manifest)]
+    assert len(records) == 2
+    for rec in records:
+        assert (tmp_path / rec["image"]).exists()
+        assert (tmp_path / rec["musicxml"]).exists()
+        assert any(t.startswith("note_") for t in rec["tokens"])
+    # the token target captures chord symbols (the jazz payload), not just notes
+    assert any(t.startswith("chord_") for t in score_to_tokens(items[0].score))
