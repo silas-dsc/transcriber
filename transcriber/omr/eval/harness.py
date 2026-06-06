@@ -33,6 +33,10 @@ class HarnessResult:
 
     per_item: list[tuple[str, ScoreComparison]] = field(default_factory=list)
     engine: str = "auto"
+    renderer: str = "builtin"
+    font: str | None = None
+    style: str | None = None
+    augmentation: str = "clean"
 
     @property
     def n_items(self) -> int:
@@ -74,19 +78,33 @@ def evaluate_corpus(
     dpi: int = 300,
     time_signature: str = "4/4",
     augmentation: str = "clean",
+    font: str | None = None,
+    style: str | None = None,
 ) -> HarnessResult:
     """Render, recognise and score every item in ``items``.
 
     Args:
         augmentation: Named degradation preset applied to the rendered image
             before recognition (``"clean"`` = none).  Exercises the
-            pre-processing pipeline against skew / warp / noise / blur.
+            pre-processing pipeline against skew / warp / noise / blur.  Combine
+            a handwritten render with ``"photo"`` to emulate a scanned fakebook.
+        font: SMuFL music font for the verovio renderer (e.g. ``"Petaluma"``
+            for the handwritten / "jazz" face).  ``None`` keeps the default.
+            Run the same corpus with and without it to measure how much
+            accuracy the handwritten glyphs cost.
+        style: MuseScore style for the ``musescore`` renderer (e.g.
+            ``"MuseJazz"`` for the bundled handwritten jazz font + chord text).
     """
-    result = HarnessResult(engine=engine)
+    result = HarnessResult(
+        engine=engine, renderer=renderer, font=font, style=style, augmentation=augmentation
+    )
     with tempfile.TemporaryDirectory(prefix="omr_eval_") as tmp:
         tmpdir = Path(tmp)
         for item in items:
-            image = render_reference(item.score, tmpdir / f"{item.id}.png", renderer=renderer)
+            image = render_reference(
+                item.score, tmpdir / f"{item.id}.png",
+                renderer=renderer, font=font, style=style, dpi=dpi,
+            )
             if augmentation != "clean":
                 image = _augment_file(image, augmentation)
             config = OMRConfig(engine=engine, dpi=dpi, time_signature=time_signature)
@@ -116,8 +134,12 @@ def _augment_file(image_path: Path, preset: str) -> Path:
 
 def format_report(result: HarnessResult) -> str:
     """Render a :class:`HarnessResult` as a human-readable text report."""
+    font_label = f", font={result.font}" if result.font else ""
+    style_label = f", style={result.style}" if result.style else ""
+    aug_label = f", aug={result.augmentation}" if result.augmentation != "clean" else ""
     lines = [
-        f"OMR accuracy report  (engine={result.engine}, {result.n_items} items)",
+        f"OMR accuracy report  (engine={result.engine}, renderer={result.renderer}"
+        f"{font_label}{style_label}{aug_label}, {result.n_items} items)",
         "=" * 60,
         f"{'item':<28}{'F1':>7}{'SER':>7}{'dur':>7}{'MV2H':>7}",
         "-" * 60,

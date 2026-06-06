@@ -468,3 +468,56 @@ def test_llm_review_never_runs_without_client_or_sdk(monkeypatch):
     score = make_phrase(C_MAJOR_SCALE)
     _, report = llm_review.review_score(score, client=None)
     assert report.error is not None and report.applied == 0
+
+
+# --------------------------------------------------------------------------- #
+# Jazz / handwritten font rendering (verovio only)
+# --------------------------------------------------------------------------- #
+def test_petaluma_font_renders_and_differs_from_default(tmp_path):
+    """Rendering with the handwritten 'Petaluma' face must work and differ
+    from the default engraved font -- the precondition for measuring how much
+    accuracy the jazz/handwritten glyphs cost."""
+    pytest.importorskip("verovio")
+    # cairocffi dlopens libcairo at *import* time, raising OSError (not
+    # ImportError) when the system lib is absent -- so importorskip won't catch
+    # it.  Skip cleanly in both cases.
+    try:
+        import cairosvg  # noqa: F401
+    except (ImportError, OSError):
+        pytest.skip("cairosvg/libcairo unavailable (try: brew install cairo)")
+    from PIL import Image
+
+    score = make_phrase(C_MAJOR_SCALE)
+    default_png = render_reference(score, tmp_path / "default.png", renderer="verovio")
+    jazz_png = render_reference(score, tmp_path / "jazz.png", renderer="verovio", font="Petaluma")
+
+    default_arr = np.asarray(Image.open(default_png).convert("L"))
+    jazz_arr = np.asarray(Image.open(jazz_png).convert("L"))
+    assert jazz_arr.min() < 128  # actually drew ink, not a blank page
+    # Different fonts => different pixels (allowing for identical canvas sizes).
+    assert default_arr.shape != jazz_arr.shape or not np.array_equal(default_arr, jazz_arr)
+
+
+def test_builtin_renderer_ignores_font_without_crashing(tmp_path):
+    """A font on the built-in engraver is a no-op, not an error."""
+    out = render_reference(make_phrase(C_MAJOR_SCALE), tmp_path / "b.png",
+                           renderer="builtin", font="Petaluma")
+    assert out.exists()
+
+
+def test_musescore_musejazz_renders_when_available(tmp_path):
+    """If MuseScore is installed, the musescore renderer applies the MuseJazz
+    handwritten style and produces a non-blank page (precondition for the
+    jazz-font corpus)."""
+    from transcriber.omr.eval.render_ref import _find_musescore, render_reference
+
+    if _find_musescore() is None:
+        pytest.skip("MuseScore CLI not installed")
+    from PIL import Image
+
+    out = render_reference(
+        make_phrase(C_MAJOR_SCALE), tmp_path / "mj.png",
+        renderer="musescore", style="MuseJazz", dpi=150,
+    )
+    assert out.exists()
+    assert np.asarray(Image.open(out).convert("L")).min() < 128  # drew ink

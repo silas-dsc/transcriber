@@ -12,6 +12,10 @@ Renderer preference:
 2. **verovio** -- if ``verovio`` (+ ``cairosvg``) are installed, used for
    high-fidelity, real-world-looking engraving of arbitrary scores (better for
    evaluating against full-page corpora).
+3. **musescore** -- if the MuseScore CLI is installed, the highest-fidelity
+   option and the only one with the handwritten **MuseJazz** "jazz" font and
+   chord-symbol text (pass ``style="MuseJazz"``).  Combine with an ``augment``
+   preset (e.g. ``"photo"``) to approximate a scanned/photographed fakebook.
 """
 
 from __future__ import annotations
@@ -24,6 +28,12 @@ import numpy as np
 from music21 import converter, stream
 
 logger = logging.getLogger(__name__)
+
+# SMuFL music fonts bundled with verovio.  "Leipzig" is verovio's default
+# engraved face; "Petaluma" is the handwritten / "jazz" face -- rendering the
+# corpus in Petaluma is how we measure how badly the engines degrade on the
+# handwritten lead-sheet style used by jazz fakebooks.
+VEROVIO_FONTS = ("Leipzig", "Bravura", "Petaluma", "Leland", "Gootville")
 
 # Geometry of the built-in engraver (pixels).  Matches primitive's treble-clef
 # assumption: the bottom staff line is E4 (diatonic step 0).
@@ -47,14 +57,25 @@ def render_reference(
     score: stream.Score | str,
     out_path: str | Path,
     renderer: str = "builtin",
+    font: str | None = None,
+    style: str | None = None,
+    dpi: int = 300,
 ) -> Path:
     """Render ``score`` (or a MusicXML path) to an image at ``out_path``.
 
     Args:
         score: A music21 score or a path to MusicXML.
         out_path: Destination image path (``.png``).
-        renderer: ``"builtin"``, ``"verovio"`` or ``"auto"`` (verovio if
-            available, else builtin).
+        renderer: ``"builtin"``, ``"verovio"``, ``"musescore"`` or ``"auto"``
+            (verovio if available, else builtin).
+        font: SMuFL music font for the verovio renderer (see
+            :data:`VEROVIO_FONTS`).  ``None`` keeps verovio's default
+            (``Leipzig``).  Use ``"Petaluma"`` for the handwritten / "jazz"
+            face.  Ignored by the built-in engraver, which draws raw glyphs.
+        style: MuseScore style for the ``musescore`` renderer -- a ``.mss``
+            path, or ``"MuseJazz"`` for the bundled handwritten jazz style
+            (musical font + chord-symbol text).  Ignored by other renderers.
+        dpi: Raster resolution for the ``musescore`` renderer.
 
     Returns:
         The path the image was written to.
@@ -66,21 +87,37 @@ def render_reference(
     if renderer == "auto":
         renderer = "verovio" if _verovio_available() else "builtin"
 
+    if renderer == "musescore":
+        rendered = _render_musescore(score, out_path, style=style, dpi=dpi)
+        if rendered is not None:
+            return rendered
+        logger.warning("MuseScore unavailable; falling back to builtin renderer")
+
     if renderer == "verovio":
-        rendered = _render_verovio(score, out_path)
+        rendered = _render_verovio(score, out_path, font=font)
         if rendered is not None:
             return rendered
         logger.warning("verovio unavailable; falling back to builtin renderer")
 
+    if font:
+        logger.warning("built-in renderer cannot apply font %r; ignoring it", font)
     return _render_builtin(score, out_path)
 
 
-def render_reference_array(score: stream.Score | str, renderer: str = "builtin") -> np.ndarray:
+def render_reference_array(
+    score: stream.Score | str,
+    renderer: str = "builtin",
+    font: str | None = None,
+    style: str | None = None,
+    dpi: int = 300,
+) -> np.ndarray:
     """Render to an in-memory grayscale ``float32`` array in ``[0, 1]``."""
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
-        path = render_reference(score, Path(tmp) / "ref.png", renderer=renderer)
+        path = render_reference(
+            score, Path(tmp) / "ref.png", renderer=renderer, font=font, style=style, dpi=dpi
+        )
         from PIL import Image
 
         with Image.open(path) as im:
@@ -260,6 +297,26 @@ def _draw_stem(draw, step, cx, cy, nw, nh):
 # --------------------------------------------------------------------------- #
 # verovio (optional, high fidelity)
 # --------------------------------------------------------------------------- #
+def _set_verovio_font(toolkit, font: str) -> bool:
+    """Select ``font`` on a verovio toolkit, returning True on success.
+
+    The pip ``verovio`` package takes a dict; older SWIG bindings took a JSON
+    string.  ``setOptions`` returns False (and logs ``Cannot parse JSON``) for
+    the wrong form, so try the dict first and fall back to the string.
+    """
+    import json
+
+    try:
+        if toolkit.setOptions({"font": font}):
+            return True
+    except (TypeError, ValueError):
+        pass
+    try:
+        return bool(toolkit.setOptions(json.dumps({"font": font})))
+    except (TypeError, ValueError):
+        return False
+
+
 def _verovio_available() -> bool:
     return (
         importlib.util.find_spec("verovio") is not None
@@ -267,11 +324,12 @@ def _verovio_available() -> bool:
     )
 
 
-def _render_verovio(score: stream.Score, out_path: Path) -> Path | None:
+def _render_verovio(score: stream.Score, out_path: Path, font: str | None = None) -> Path | None:
     try:
-        import cairosvg
+        import cairosvg  # cairocffi dlopens libcairo at import -> OSError if absent
         import verovio
-    except ImportError:
+    except (ImportError, OSError) as exc:
+        logger.warning("verovio/cairosvg unavailable (%s); falling back to builtin", exc)
         return None
 
     import tempfile
@@ -280,7 +338,149 @@ def _render_verovio(score: stream.Score, out_path: Path) -> Path | None:
         mxl = Path(tmp) / "ref.musicxml"
         score.write("musicxml", fp=str(mxl))
         toolkit = verovio.toolkit()
+        if font and not _set_verovio_font(toolkit, font):
+            logger.warning("verovio rejected font %r; rendering with its default", font)
         toolkit.loadFile(str(mxl))
         svg = toolkit.renderToSVG(1)
-        cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out_path), background_color="white")
+        try:
+            cairosvg.svg2png(
+                bytestring=svg.encode(), write_to=str(out_path), background_color="white"
+            )
+        except OSError as exc:
+            # cairosvg imports fine but needs a system libcairo at call time;
+            # without it, fall back to the built-in engraver rather than crash.
+            logger.warning("cairosvg could not rasterise (libcairo missing?): %s", exc)
+            return None
     return out_path
+
+
+# --------------------------------------------------------------------------- #
+# MuseScore (optional, highest fidelity -- the only renderer with the
+# handwritten MuseJazz "jazz" font + chord-symbol text used by real lead sheets)
+# --------------------------------------------------------------------------- #
+MUSESCORE_CANDIDATES = (
+    "/Applications/MuseScore 4.app/Contents/MacOS/mscore",
+    "/Applications/MuseScore 3.app/Contents/MacOS/mscore",
+    "mscore",
+    "musescore",
+    "MuseScore4",
+    "mscore4portable",
+)
+
+
+def _find_musescore() -> str | None:
+    """Locate a MuseScore CLI executable, or None if not installed."""
+    import shutil
+
+    for cand in MUSESCORE_CANDIDATES:
+        if cand.startswith("/"):
+            if Path(cand).exists():
+                return cand
+        else:
+            found = shutil.which(cand)
+            if found:
+                return found
+    return None
+
+
+def _resolve_style(style: str | None, musescore: str) -> str | None:
+    """Resolve a style argument to a ``.mss`` path.
+
+    ``None`` -> no style (default engraving font).  An existing path -> used
+    as-is.  ``"MuseJazz"`` -> the ``MuseJazz.mss`` bundled with the MuseScore
+    app, so callers don't need to know the app-internal path.
+    """
+    if not style:
+        return None
+    if style.lower() != "musejazz":
+        return style  # treat as an explicit style path
+    if "/Contents/MacOS/" in musescore:
+        cand = Path(musescore).parents[1] / "Resources" / "styles" / "MuseJazz.mss"
+        if cand.exists():
+            return str(cand)
+    logger.warning("MuseJazz.mss not found near %s; rendering without a style", musescore)
+    return None
+
+
+def _run_musescore(musescore: str, args: list[str]) -> bool:
+    """Run the MuseScore CLI; return True on success (logs + False on failure)."""
+    import subprocess
+
+    try:
+        subprocess.run(
+            [musescore, *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            stdin=subprocess.DEVNULL,
+        )
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("MuseScore command failed: %s", exc)
+        return False
+
+
+def _render_musescore(
+    score: stream.Score, out_path: Path, style: str | None = None, dpi: int = 300
+) -> Path | None:
+    """Render ``score`` to ``out_path`` via the MuseScore CLI.
+
+    A style (e.g. the handwritten MuseJazz font) is applied with a two-step
+    convert -- ``musicxml + -S style -> .mscz -> .png`` -- because MuseScore 4
+    only honours ``musicalSymbolFont`` from ``-S`` when going through a score
+    file, not on a direct ``.musicxml -> .png`` export.  MuseScore writes one
+    ``<stem>-N.png`` per page; pages are flattened onto white and stacked
+    vertically into a single image so the rest of the pipeline sees one image.
+    """
+    import tempfile
+
+    musescore = _find_musescore()
+    if musescore is None:
+        return None
+    style_path = _resolve_style(style, musescore)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        mxl = tmp / "ref.musicxml"
+        score.write("musicxml", fp=str(mxl))
+
+        src = mxl
+        if style_path:
+            mscz = tmp / "styled.mscz"
+            if not _run_musescore(musescore, ["-S", style_path, str(mxl), "-o", str(mscz)]):
+                return None
+            src = mscz
+
+        if not _run_musescore(musescore, ["-r", str(dpi), str(src), "-o", str(tmp / "page.png")]):
+            return None
+
+        pages = sorted(tmp.glob("page-*.png"))
+        if not pages:
+            logger.warning("MuseScore produced no PNG output for %s", out_path.name)
+            return None
+        _stack_pages_on_white(pages, out_path)
+    return out_path
+
+
+def _stack_pages_on_white(pages: list[Path], out_path: Path) -> None:
+    """Flatten each (possibly RGBA) page onto white and stack vertically."""
+    from PIL import Image
+
+    imgs = []
+    for p in pages:
+        im = Image.open(p).convert("RGBA")
+        bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
+        imgs.append(Image.alpha_composite(bg, im).convert("RGB"))
+
+    if len(imgs) == 1:
+        imgs[0].save(out_path)
+        return
+
+    width = max(im.width for im in imgs)
+    canvas = Image.new("RGB", (width, sum(im.height for im in imgs)), (255, 255, 255))
+    y = 0
+    for im in imgs:
+        canvas.paste(im, (0, y))
+        y += im.height
+    canvas.save(out_path)
