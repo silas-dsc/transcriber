@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Outputs
+*.musicxml
+*.mid
+*.midi
+separated/
+
+# Keep the bundled demo audio but ignore other local audio
+/*.wav
+/*.mp3
+/*.flac
+!examples/demo.wav
+
+# OS
+.DS_Store

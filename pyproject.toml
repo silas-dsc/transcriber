@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transcriber"
+version = "0.1.0"
+description = "Transcribe an audio recording into a MusicXML score: stem separation, rhythm/pitch analysis, MusicXML export."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "transcriber contributors" }]
+keywords = ["music", "transcription", "musicxml", "audio", "stem-separation", "demucs", "basic-pitch"]
+
+# Core dependencies: everything needed to run the pipeline end-to-end using
+# the built-in librosa fallbacks (HPSS separation + pYIN pitch tracking).
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.8",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "music21>=9.1",
+    "pretty_midi>=0.2.10",
+    "pillow>=9.0",       # OMR: image loading / built-in engraver
+    "pypdfium2>=4.0",    # OMR: render PDF pages without system Poppler
+]
+
+[project.optional-dependencies]
+# High-quality machine-learning back-ends, split so each can be installed on
+# its own.  NOTE for macOS + Python > 3.11: basic-pitch's metadata pins
+# tensorflow-macos, which has no wheels there, so `pip install ".[pitch]"`
+# fails.  Use `scripts/install_ml.sh` (or the ONNX install in the README),
+# which installs basic-pitch with the ONNX back-end and avoids tensorflow.
+separation = [
+    "demucs>=4.0",
+    "torch>=2.0",
+]
+pitch = [
+    "basic-pitch>=0.3",
+    "onnxruntime>=1.15",
+]
+full = [
+    "demucs>=4.0",
+    "torch>=2.0",
+    "basic-pitch>=0.3",
+    "onnxruntime>=1.15",
+]
+# Optical Music Recognition engines (image/PDF -> MusicXML).  All optional:
+# without any of these the OMR pipeline uses its built-in classical-CV
+# recogniser.  oemer and homr are deep-learning engines; Audiveris is the Java
+# engine and is detected on PATH rather than pip-installed.
+omr = [
+    "oemer>=0.1.7",
+]
+omr-homr = [
+    "homr>=0.1",
+]
+# High-fidelity reference rendering for the accuracy harness (MusicXML -> image).
+omr-eval = [
+    "verovio>=4.0",
+    "cairosvg>=2.7",
+]
+# Optional LLM-based musical sense-checking of recognised scores (Claude).
+llm = [
+    "anthropic>=0.40",
+]
+# Browser-based web interface (upload audio -> download MusicXML).
+web = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "httpx>=0.27",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+transcriber = "transcriber.cli:main"
+transcriber-web = "transcriber.web:main"
+omr = "transcriber.omr.cli:main"
+omr-eval = "transcriber.omr.eval.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/silas-dsc/transcriber"
+
+[tool.setuptools.packages.find]
+include = ["transcriber*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

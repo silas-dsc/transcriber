@@ -1,0 +1,24 @@
+# Core runtime dependencies (the pipeline runs end-to-end with just these,
+# using the librosa HPSS + pYIN fallbacks).
+numpy>=1.22
+scipy>=1.8
+librosa>=0.10
+soundfile>=0.12
+music21>=9.1
+pretty_midi>=0.2.10
+pillow>=9.0          # optical music recognition: image / engraver
+pypdfium2>=4.0       # optical music recognition: PDF page rendering
+
+# For the high-quality ML back-ends (Demucs separation, Spotify basic-pitch
+# polyphonic transcription) install the optional extras instead:
+#
+#     pip install -e ".[full]"
+#
+# which adds: demucs, basic-pitch, torch
+#
+# For the optical music recognition (image/PDF -> MusicXML) engines:
+#
+#     pip install -e ".[omr]"        # oemer (deep-learning OMR)
+#     pip install -e ".[omr-eval]"   # verovio + cairosvg (reference rendering)
+#
+# Without those the OMR pipeline still runs using its built-in recogniser.

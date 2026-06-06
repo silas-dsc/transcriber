@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>transcriber — audio / sheet music → MusicXML</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 680px;
+         margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { margin-bottom: 0.2rem; }
+  .sub { color: #888; margin-top: 0; }
+  form, .config { border: 1px solid #8884; border-radius: 12px; padding: 1.25rem; margin-top: 1.25rem; }
+  label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; }
+  input, select { width: 100%; padding: 0.5rem; box-sizing: border-box;
+                  border-radius: 8px; border: 1px solid #8886; background: transparent; color: inherit; }
+  .opts { display: none; } .opts.show { display: block; }
+  .row { display: flex; gap: 1rem; } .row > div { flex: 1; }
+  button { margin-top: 1.25rem; padding: 0.7rem 1.2rem; border: 0; border-radius: 8px;
+           background: #4f46e5; color: white; font-size: 1rem; cursor: pointer; width: 100%; }
+  button:disabled { opacity: 0.6; cursor: progress; }
+  .note { color: #888; font-size: 0.85rem; }
+  #status { margin-top: 1rem; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>transcriber</h1>
+  <p class="sub">Upload a recording <em>or</em> a picture of sheet music → get a MusicXML score.</p>
+
+  <div class="config">
+    <label for="api">Backend URL</label>
+    <input id="api" type="url" placeholder="https://your-backend.example.com" />
+    <p class="note">Where the transcriber backend is hosted (e.g. a Hugging Face
+       Space or Render service). Saved in your browser. You can also pass
+       <code>?api=https://...</code> in the page URL.</p>
+  </div>
+
+  <form id="form">
+    <label for="file">Audio, PDF or image</label>
+    <input id="file" type="file" required
+           accept="audio/*,application/pdf,image/*,.wav,.mp3,.flac,.ogg,.m4a,.pdf,.png,.jpg,.jpeg,.tif,.tiff">
+
+    <div id="audioOpts" class="opts">
+      <div class="row">
+        <div>
+          <label for="separation">Separation</label>
+          <select id="separation">
+            <option value="auto">auto</option>
+            <option value="demucs">demucs</option>
+            <option value="hpss">hpss (fallback)</option>
+          </select>
+        </div>
+        <div>
+          <label for="pitch">Pitch</label>
+          <select id="pitch">
+            <option value="auto">auto</option>
+            <option value="basic-pitch">basic-pitch</option>
+            <option value="pyin">pyin (fallback)</option>
+          </select>
+        </div>
+      </div>
+      <label><input type="checkbox" id="drums" checked style="width:auto"> Transcribe drums</label>
+    </div>
+
+    <div id="omrOpts" class="opts">
+      <label for="engine">OMR engine</label>
+      <select id="engine">
+        <option value="auto">auto (best installed, else built-in)</option>
+        <option value="oemer">oemer (deep learning)</option>
+        <option value="primitive">primitive (built-in)</option>
+        <option value="ensemble">ensemble</option>
+      </select>
+    </div>
+
+    <button id="submit" type="submit">Convert to MusicXML</button>
+    <p class="note">The score downloads automatically when ready.</p>
+  </form>
+  <div id="status"></div>
+
+<script>
+const AUDIO = ['wav','mp3','flac','ogg','m4a','aiff','aif'];
+const $ = (id) => document.getElementById(id);
+const apiEl = $('api'), fileEl = $('file');
+
+// Resolve backend URL: ?api= query param > saved value.
+const params = new URLSearchParams(location.search);
+apiEl.value = params.get('api') || localStorage.getItem('transcriber_api') || '';
+apiEl.addEventListener('change', () => localStorage.setItem('transcriber_api', apiEl.value.trim()));
+
+function ext(name){ const m = /\.([^.]+)$/.exec(name||''); return m ? m[1].toLowerCase() : ''; }
+function refresh(){
+  const e = ext(fileEl.files[0] && fileEl.files[0].name);
+  const isAudio = AUDIO.includes(e);
+  $('audioOpts').classList.toggle('show', isAudio && !!e);
+  $('omrOpts').classList.toggle('show', !!e && !isAudio);
+}
+fileEl.addEventListener('change', refresh);
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = fileEl.files[0];
+  const api = apiEl.value.trim().replace(/\/+$/, '');
+  if (!file) return;
+  if (!api) { $('status').textContent = 'Set the Backend URL first.'; return; }
+
+  const data = new FormData();
+  data.append('file', file);
+  data.append('separation', $('separation').value);
+  data.append('pitch', $('pitch').value);
+  data.append('drums', $('drums').checked ? 'true' : 'false');
+  data.append('engine', $('engine').value);
+
+  $('submit').disabled = true;
+  $('status').textContent = 'Converting… this can take a moment.';
+  try {
+    const resp = await fetch(api + '/convert', { method: 'POST', body: data });
+    if (!resp.ok) { throw new Error((await resp.text()) || ('HTTP ' + resp.status)); }
+    const blob = await resp.blob();
+    const name = (file.name.replace(/\.[^.]+$/, '') || 'score') + '.musicxml';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    URL.revokeObjectURL(url);
+    $('status').textContent = 'Done — downloaded ' + name;
+  } catch (err) {
+    $('status').textContent = 'Error: ' + err.message +
+      ' (is the Backend URL correct and the service awake?)';
+  } finally {
+    $('submit').disabled = false;
+  }
+});
+</script>
+</body>
+</html>
