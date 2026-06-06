@@ -521,3 +521,71 @@ def test_musescore_musejazz_renders_when_available(tmp_path):
     )
     assert out.exists()
     assert np.asarray(Image.open(out).convert("L")).min() < 128  # drew ink
+
+
+# --------------------------------------------------------------------------- #
+# Chord-symbol recognition (jazz lead-sheet payload)
+# --------------------------------------------------------------------------- #
+def test_jazz_text_to_figure_handles_fakebook_shorthand():
+    from transcriber.omr.chords import jazz_text_to_figure
+
+    assert jazz_text_to_figure("C-7") == "Cm7"      # '-' = minor
+    assert jazz_text_to_figure("Bb7") == "B-7"       # jazz flat -> music21 flat
+    assert jazz_text_to_figure("A-7b5") == "Am7b5"   # half-dim spelling
+    assert jazz_text_to_figure("C△") == "Cmaj7"  # triangle = major7
+    assert jazz_text_to_figure("F#m") == "F#m"
+    assert jazz_text_to_figure("") is None
+
+
+def test_normalize_chord_figure_canonicalises_music21_spelling():
+    from transcriber.omr.eval.metrics import normalize_chord_figure
+
+    assert normalize_chord_figure("B-m6") == "Bbm6"   # music21 '-' = flat
+    assert normalize_chord_figure("Cmin7") == "Cm7"
+    assert normalize_chord_figure("C△") == "Cmaj7"
+    assert normalize_chord_figure("Cmaj7") == "Cmaj7"
+
+
+def test_make_lead_sheet_carries_chord_symbols():
+    from transcriber.omr.eval.datasets import make_lead_sheet
+    from transcriber.omr.eval.metrics import score_to_chords
+
+    score = make_lead_sheet([60, 62, 64, 65], chords=[(0.0, "Cm7"), (2.0, "F7")])
+    chords = score_to_chords(score)
+    assert chords == [(0.0, "Cm7"), (2.0, "F7")]
+
+
+def test_compare_chords_perfect_and_penalises_misses():
+    from transcriber.omr.eval.datasets import make_lead_sheet
+    from transcriber.omr.eval.metrics import compare_chords
+
+    ref = make_lead_sheet([60, 62, 64, 65], chords=[(0.0, "Cm7"), (2.0, "F7")])
+    assert compare_chords(ref, ref).f1 == 1.0
+    partial = make_lead_sheet([60, 62, 64, 65], chords=[(0.0, "Cm7")])
+    c = compare_chords(ref, partial)
+    assert c.recall == 0.5 and c.precision == 1.0
+
+
+def test_attach_chords_round_trips_through_compare():
+    from music21 import stream
+
+    from transcriber.omr.chords import attach_chords
+    from transcriber.omr.types import OMRChordSymbol
+    from transcriber.omr.eval.datasets import make_lead_sheet
+    from transcriber.omr.eval.metrics import compare_chords
+
+    ref = make_lead_sheet([60, 62, 64, 65], chords=[(0.0, "Cm7"), (2.0, "F7")])
+    pred = stream.Score()
+    pred.insert(0, stream.Part())
+    # attach_chords feeds figures verbatim to music21, so OMRChordSymbol.figure
+    # is already music21 syntax (recognize_chords converts jazz text first).
+    attach_chords(pred, [OMRChordSymbol("Cm7", 0.0), OMRChordSymbol("F7", 2.0)])
+    assert compare_chords(ref, pred).f1 == 1.0
+
+
+def test_recognize_chords_without_ocr_returns_empty():
+    from transcriber.omr.chords import recognize_chords, _ocr_backend
+
+    if _ocr_backend() is not None:
+        pytest.skip("an OCR backend is installed; this guards the no-OCR path")
+    assert recognize_chords(np.ones((80, 200), dtype=np.float32), []) == []

@@ -190,3 +190,69 @@ def download_musicxml(urls: list[str], dest: str | Path, limit: int | None = Non
         except Exception as exc:  # pragma: no cover - network dependent
             logger.warning("Failed to fetch/parse %s: %s", url, exc)
     return items
+
+
+# --------------------------------------------------------------------------- #
+# Lead sheets with chord symbols (the jazz-fakebook payload)
+# --------------------------------------------------------------------------- #
+# A small pool of jazz chord qualities (music21 figure syntax) to draw from.
+# music21 writes flats as "B-"/"E-" (not "Bb"); the renderer/OCR see proper
+# flat glyphs and the metric normalises either spelling.
+_JAZZ_QUALITIES = ("", "m7", "7", "maj7", "m7b5", "6", "m6", "9", "dim7")
+_JAZZ_ROOTS = ("C", "D", "E", "F", "G", "A", "B-", "E-")
+
+
+def make_lead_sheet(
+    pitches: list[int],
+    durations: list[float] | None = None,
+    chords: list[tuple[float, str]] | None = None,
+) -> stream.Score:
+    """Build a single-staff treble lead sheet: a melody plus chord symbols.
+
+    Args:
+        pitches: Melody MIDI pitches.
+        durations: Per-note quarter lengths (defaults to all quarter notes).
+        chords: ``(offset_ql, figure)`` chord symbols in music21 figure syntax,
+            e.g. ``[(0.0, "Cmaj7"), (4.0, "Am7"), (8.0, "Dm7"), (12.0, "G7")]``.
+    """
+    from music21 import harmony
+
+    durations = durations or [1.0] * len(pitches)
+    score = stream.Score()
+    part = stream.Part()
+    part.insert(0, clef.TrebleClef())
+    part.insert(0, meter.TimeSignature("4/4"))
+    offset = 0.0
+    for p, d in zip(pitches, durations):
+        n = note.Note(int(p))
+        n.quarterLength = float(d)
+        part.insert(offset, n)
+        offset += float(d)
+    for c_off, figure in chords or []:
+        part.insert(float(c_off), harmony.ChordSymbol(figure))
+    score.insert(0, part)
+    score.makeNotation(inPlace=True)
+    return score
+
+
+def synthetic_lead_sheet_corpus(
+    n_items: int = 4, bars: int = 8, seed: int = 0
+) -> list[CorpusItem]:
+    """Generate random diatonic melodies with one chord symbol per bar.
+
+    Deterministic and offline -- ideal for exercising the chord-symbol
+    render/recognise/compare loop without a network corpus.
+    """
+    rng = random.Random(seed)
+    pool = [p for p in range(60, 82) if p % 12 in _NATURAL_CLASSES]
+    items: list[CorpusItem] = []
+    for i in range(n_items):
+        pitches = [rng.choice(pool) for _ in range(bars * 4)]  # 4 quarter notes / bar
+        chords = [
+            (float(b * 4), rng.choice(_JAZZ_ROOTS) + rng.choice(_JAZZ_QUALITIES))
+            for b in range(bars)
+        ]
+        items.append(
+            CorpusItem(id=f"leadsheet_{i:03d}", score=make_lead_sheet(pitches, chords=chords))
+        )
+    return items

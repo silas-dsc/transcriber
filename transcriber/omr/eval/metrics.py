@@ -175,3 +175,116 @@ def compare_scores(
         n_predicted=n_pred,
         n_matched=n_matched,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Chord-symbol metrics (the lead-sheet payload: C-7, G7, A-7b5, ...)
+# --------------------------------------------------------------------------- #
+import re as _re  # noqa: E402  (kept local to the chord section)
+
+# Unicode / shorthand -> ASCII canonical fragments.  Order matters: apply the
+# multi-char jazz glyphs before single chars.
+_CHORD_UNICODE = {
+    "♯": "#", "♭": "b",            # ♯ ♭
+    "△": "maj7", "Δ": "maj7",       # △ Δ  (major 7)
+    "ø": "m7b5", "Ø": "m7b5",       # ø Ø  (half-diminished)
+    "°": "dim", "⁰": "dim",          # ° (diminished)
+    "–": "-", "—": "-",              # – —  (en/em dash -> hyphen)
+}
+# Root = note letter + optional accidental.  In music21 figures a flat is
+# written "-" (e.g. "B-m6" = B-flat minor 6), so the accidental class includes
+# it; we canonicalise "-" -> "b".
+_ROOT_RE = _re.compile(r"^([A-Ga-g])([#b-]?)")
+
+
+def normalize_chord_figure(figure: str) -> str:
+    """Canonicalise a chord label so equivalent spellings compare equal.
+
+    Operates on **music21 figure syntax** (what :func:`score_to_chords` reads
+    off a score), where a flat root is ``"-"``: ``B-m6`` -> ``Bbm6``,
+    ``C△`` -> ``Cmaj7``, ``Cmin7`` -> ``Cm7``.  The jazz fakebook convention
+    where a bare ``-`` means *minor* (``C-7``) is handled upstream by the OCR
+    parser (:func:`transcriber.omr.chords.jazz_text_to_figure`), which converts
+    recognised text into music21 syntax before it reaches this function.
+    """
+    if not figure:
+        return ""
+    s = figure.strip()
+    for uni, ascii_ in _CHORD_UNICODE.items():
+        s = s.replace(uni, ascii_)
+    m = _ROOT_RE.match(s)
+    if not m:
+        return s.lower()
+    accidental = "b" if m.group(2) == "-" else m.group(2)
+    root = m.group(1).upper() + accidental
+    q = s[m.end():]
+    # Case-sensitive on the quality: capital 'M' = major, lower 'm' = minor.
+    # (A case-insensitive pass would wrongly fold 'm7' into 'maj7'.)
+    q = q.replace("major", "maj").replace("Maj", "maj")
+    q = _re.sub(r"M(?=7|9|13|aj|$)", "maj", q)   # bare capital M -> major
+    q = q.replace("min", "m").replace("Min", "m").replace("MIN", "m")
+    q = q.lower().replace("ma7", "maj7")
+    return root + q
+
+
+def score_to_chords(score: stream.Score | str) -> list[tuple[float, str]]:
+    """Flatten a score to ``(offset, normalized_figure)`` chord-symbol events."""
+    from music21 import harmony
+
+    if isinstance(score, str):
+        score = converter.parse(score)
+    out: list[tuple[float, str]] = []
+    for h in score.recurse().getElementsByClass(harmony.ChordSymbol):
+        fig = h.figure if h.figure else h.findFigure()
+        out.append((float(h.getOffsetInHierarchy(score)), normalize_chord_figure(fig)))
+    out.sort()
+    return out
+
+
+@dataclass
+class ChordComparison:
+    """Chord-symbol recognition accuracy."""
+
+    precision: float
+    recall: float
+    f1: float
+    n_reference: int
+    n_predicted: int
+    n_matched: int
+
+
+def compare_chords(
+    reference: stream.Score | str,
+    predicted: stream.Score | str,
+    onset_tolerance: float = 1.0,
+) -> ChordComparison:
+    """Compare predicted vs reference chord symbols.
+
+    A predicted chord matches a reference chord when their normalised figures
+    are equal and their onsets are within ``onset_tolerance`` quarter lengths
+    (chord placement is coarser than note onsets, so the default is a beat).
+    Greedy one-to-one matching.
+    """
+    ref = score_to_chords(reference)
+    pred = list(score_to_chords(predicted))
+
+    matched = 0
+    used = [False] * len(pred)
+    for r_off, r_fig in ref:
+        best = -1
+        best_d = onset_tolerance + 1e-9
+        for j, (p_off, p_fig) in enumerate(pred):
+            if used[j] or p_fig != r_fig:
+                continue
+            d = abs(p_off - r_off)
+            if d <= best_d:
+                best, best_d = j, d
+        if best >= 0:
+            used[best] = True
+            matched += 1
+
+    n_ref, n_pred = len(ref), len(pred)
+    precision = matched / n_pred if n_pred else (1.0 if n_ref == 0 else 0.0)
+    recall = matched / n_ref if n_ref else (1.0 if n_pred == 0 else 0.0)
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+    return ChordComparison(precision, recall, f1, n_ref, n_pred, matched)

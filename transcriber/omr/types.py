@@ -39,6 +39,27 @@ class OMRNote:
 
 
 @dataclass
+class OMRChordSymbol:
+    """A recognised chord symbol (the text above the staff on a lead sheet).
+
+    Attributes:
+        figure: The chord text as recognised, e.g. ``"C-7"``, ``"G7"``,
+            ``"A-7b5"``.  Stored verbatim; :mod:`transcriber.omr.metrics`
+            normalises jazz shorthand (``-`` = minor, ``△`` = major7, ...)
+            before comparison.
+        onset: Onset position in quarter lengths from the start of the part,
+            inferred from the symbol's horizontal position over the staff.
+        staff: 1-based staff index the symbol sits above.
+        confidence: Recogniser confidence in ``[0, 1]`` (1 = certain).
+    """
+
+    figure: str
+    onset: float
+    staff: int = 1
+    confidence: float = 1.0
+
+
+@dataclass
 class StaffSystem:
     """Geometry of one detected staff (five lines) on a page.
 
@@ -85,6 +106,7 @@ class RecognizedScore:
     """
 
     notes: list[OMRNote] = field(default_factory=list)
+    chords: list[OMRChordSymbol] = field(default_factory=list)
     systems: list[StaffSystem] = field(default_factory=list)
     page_count: int = 1
     title: str = "Optical transcription"
