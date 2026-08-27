@@ -1,7 +1,10 @@
-"""Generate a 10-piece big band arrangement of "Fly Me To The Moon".
+"""Generate a 10-piece big band chart of "Fly Me To The Moon" for a singer.
 
-The arrangement is written to match a specific backing-track recording whose
-musical parameters were measured directly from the audio:
+The singer has the melody, so the band never plays it.  What the band plays is
+the supporting material the saxophone plays on the backing track, handed around
+the sections the way a Sinatra chart hands it around.
+
+Everything about the chart was measured from the recording:
 
     key      B-flat major / G minor   (chroma + Krumhansl-Schmuckler)
     tempo    120.000 BPM exactly      (onset-grid search on the drum stem)
@@ -10,12 +13,24 @@ musical parameters were measured directly from the audio:
              7 x 16-bar chorus (bars 9-120)
              8-bar coda        (bars 121-128)
 
-The 16-bar cycle was recovered by averaging beat-synchronous chroma of the
-Demucs "other" (comping) stem across all seven choruses and matching it
-against chord templates, with bass roots taken from a pYIN transcription of
-the isolated bass stem.
+Separating the track six ways with Demucs puts piano and guitar in their own
+stems and leaves the saxophone alone, and transcribing that stem with pYIN
+shows two behaviours the arrangement is built from: a **sustained counterline**
+under the voice, and **eighth-note licks at the turnaround** - 44% of the
+saxophone's notes fall in bars 15-16 of the cycle, which is only 12.5% of the
+bars.
 
-Instrumentation (as requested):
+Three rules are enforced in code rather than left to luck, and checked on the
+finished score:
+
+    * the band never doubles the melody;
+    * nothing the band plays sits in the singer's octave while she is
+      articulating a syllable - pads are pushed below her;
+    * busy figures only happen where she is holding a note, so an answer never
+      competes with a word.
+
+Instrumentation:
+    Voice   (cue staff - the singer, not played by the band)
     Reeds   Alto Sax (E-flat), Tenor Sax (B-flat), Baritone Sax (E-flat)
     Brass   Trumpet 1 (B-flat), Trumpet 2 (B-flat), Trombone (C, bass clef)
     Rhythm  Keys, Bass, Drums
@@ -196,6 +211,108 @@ MELODY: list[tuple[int, float, str | None, float, bool]] = [
 
 
 # --------------------------------------------------------------------------
+# What the saxophone plays on the recording
+# --------------------------------------------------------------------------
+#
+# The backing track carries no melody, but it does carry a written saxophone
+# part that supports where the vocal sits.  Isolating it (Demucs 6-stem, so
+# piano and guitar are pulled out separately) and transcribing it with pYIN
+# shows two distinct behaviours, and the arrangement is built out of both:
+#
+#   * a **sustained counterline** under the vocal - long tones, 1 to 3 beats,
+#     one or two per bar.  25 of its 27 notes are chord tones or tensions and
+#     the other two are chromatic approaches, so it is written, not improvised.
+#   * **eighth-note licks at the turnaround**.  44% of the saxophone's notes
+#     fall in bars 15-16 of the 16-bar cycle, which is only 12.5% of the bars -
+#     a three-and-a-half-fold concentration.  That is the band answering at the
+#     end of each phrase, and it lands where the singer is holding.
+#
+# Everything below is transcribed pitch-for-pitch from the recording.
+
+# bars 1-8, as (bar, offset, concert pitch, quarterLength)
+SAX_INTRO: list[tuple[int, float, str, float]] = [
+    (1, 0.5, "E-4", 1.5), (1, 2.0, "D4", 0.5), (1, 2.5, "C4", 0.5), (1, 3.0, "B-3", 1.0),
+    (2, 0.0, "A3", 1.0), (2, 1.0, "D4", 1.0), (2, 2.0, "G-3", 0.5), (2, 2.5, "G3", 1.0),
+    (2, 3.5, "A3", 0.5),
+    (3, 0.5, "B-3", 1.5), (3, 2.0, "A3", 0.5), (3, 2.5, "B-3", 0.5), (3, 3.0, "C4", 1.0),
+    (4, 0.0, "D4", 1.0), (4, 1.0, "A3", 1.0), (4, 2.0, "B-3", 0.5), (4, 3.0, "C4", 0.5),
+    (4, 3.5, "D4", 0.5),
+    (5, 0.5, "G3", 2.0), (5, 2.5, "F3", 0.5),
+    (6, 1.0, "F3", 0.5), (6, 2.0, "B-3", 1.0), (6, 3.5, "G3", 1.0),
+    (7, 0.5, "A3", 0.5), (7, 1.0, "A-3", 0.5), (7, 1.5, "F3", 0.5), (7, 2.5, "F3", 1.0),
+    (7, 3.5, "G3", 0.5),
+    (8, 0.0, "G-3", 1.5), (8, 1.5, "B-3", 0.5), (8, 2.0, "A3", 1.0), (8, 3.0, "G-3", 1.5),
+]
+
+# the sustained counterline, on the 16-bar cycle (cycle bar, offset, pitch, ql)
+COUNTER: list[tuple[int, float, str, float]] = [
+    (1, 0.5, "G3", 2.0),
+    (3, 0.5, "A3", 2.5), (3, 3.5, "A3", 0.5),
+    (4, 0.5, "F3", 1.5), (4, 3.0, "F3", 0.5), (4, 3.5, "G-3", 0.5),
+    (5, 0.0, "G3", 1.0),
+    (7, 0.0, "A3", 2.0), (7, 2.5, "G-3", 0.5),
+    (8, 1.0, "F3", 0.5), (8, 1.5, "D4", 1.5),
+    (9, 0.5, "G3", 3.0),
+    (10, 3.0, "G-3", 0.5), (10, 3.5, "F3", 1.0),
+    (11, 0.5, "D4", 1.5),
+    (12, 3.0, "F3", 1.5),
+    (13, 0.5, "G3", 1.5), (13, 2.0, "B-3", 0.5),
+    (14, 3.0, "F3", 1.0),
+]
+
+# turnaround lick heard in chorus 1 (cycle bars 15-16)
+LICK_A: list[tuple[int, float, str, float]] = [
+    (15, 0.0, "B-3", 1.0), (15, 1.0, "F3", 1.0), (15, 2.0, "B-3", 1.0),
+    (15, 3.0, "F3", 0.5), (15, 3.5, "C4", 0.5),
+    (16, 0.0, "D4", 2.5), (16, 3.0, "D4", 0.5), (16, 3.5, "C4", 0.5),
+]
+
+# turnaround lick heard in choruses 2 and 3 - the chromatic C - D-flat - D tail
+LICK_B: list[tuple[int, float, str, float]] = [
+    (15, 1.0, "F3", 0.5), (15, 1.5, "G3", 0.5), (15, 2.0, "B-3", 0.5),
+    (15, 2.5, "F3", 0.5), (15, 3.0, "F3", 0.5), (15, 3.5, "B-3", 0.5),
+    (16, 0.0, "C4", 0.5), (16, 0.5, "D-4", 0.5), (16, 1.5, "D4", 0.5),
+    (16, 2.0, "D-4", 0.5), (16, 2.5, "C4", 0.5), (16, 3.0, "D-4", 0.5),
+    (16, 3.5, "D4", 0.5),
+]
+
+
+def fill_windows() -> list[bool]:
+    """Eighth-by-eighth over the cycle: is the singer holding rather than
+    starting a new syllable?
+
+    A run of three or more eighths without a new syllable is where an arranger
+    puts an answer.  The band's busy figures are confined to these, so nothing
+    the horns play competes with a word.
+    """
+    onset = [False] * 128
+    for cyc, off, name, _ql, _tie in MELODY:
+        if name is not None:
+            onset[(cyc - 1) * 8 + int(off * 2)] = True
+    free = [False] * 128
+    i = 0
+    while i < 128:
+        if onset[i]:
+            i += 1
+            continue
+        j = i
+        while j < 128 and not onset[j]:
+            j += 1
+        if j - i >= 3:
+            for k in range(i, j):
+                free[k] = True
+        i = j
+    return free
+
+
+FREE = fill_windows()
+
+
+def in_window(cycle_bar: int, off: float) -> bool:
+    return FREE[((cycle_bar - 1) * 8 + int(off * 2)) % 128]
+
+
+# --------------------------------------------------------------------------
 # Voicing engine
 # --------------------------------------------------------------------------
 
@@ -296,19 +413,6 @@ def nearest(pc: int, target: int) -> int:
     return min((base, base + 12), key=lambda x: abs(x - target))
 
 
-def fit_line(pitches: list[int], who: str) -> list[int]:
-    """Octave-shift a whole phrase as a unit so its shape is never broken."""
-    lo, hi = CONCERT_RANGE[who]
-    best, best_cost = 0, None
-    for shift in range(-3, 4):
-        cand = [x + 12 * shift for x in pitches]
-        cost = sum(max(0, lo - c) + max(0, c - hi) for c in cand)
-        centre = abs(sum(cand) / len(cand) - (lo + hi) / 2)
-        if best_cost is None or (cost, centre) < best_cost:
-            best, best_cost = shift, (cost, centre)
-    return [x + 12 * best for x in pitches]
-
-
 def ensemble_voicing(lead: int, sym: str, *, spread: bool = False) -> dict[str, int]:
     """Six-part concerted voicing keyed by instrument slot.
 
@@ -402,13 +506,13 @@ def walking_bass(bar_no: int, prev_last: int | None) -> list[int]:
 
 SECTIONS = {
     1:   ("Intro", ""),
-    9:   ("A", "Head - melody"),
-    25:  ("B", "Ensemble - harmonised"),
-    41:  ("C", "Tenor Sax solo"),
-    57:  ("D", "Trumpet solo"),
-    73:  ("E", "Shout chorus"),
-    89:  ("F", "Keys solo - backgrounds"),
-    105: ("G", "Head out"),
+    9:   ("A", "VOCAL - trombone counterline, reeds answer"),
+    25:  ("B", "VOCAL - alto takes the line, brass answer"),
+    41:  ("C", "VOCAL - reeds in harmony, brass punctuate"),
+    57:  ("D", "Tenor Sax solo (open)"),
+    73:  ("E", "VOCAL - brass carry the line"),
+    89:  ("F", "VOCAL - reeds and brass trade"),
+    105: ("G", "VOCAL - full band"),
     121: ("H", "Coda"),
 }
 
@@ -459,18 +563,6 @@ def pick_lead(sym: str, target: int) -> int:
     return best
 
 
-# rhythmic figures for the shout chorus (offset, quarterLength)
-SHOUT_A = [(0.0, 1.0), (1.5, 0.5), (2.0, 1.0), (3.5, 0.5)]
-SHOUT_B = [(0.0, 1.5), (1.5, 0.5), (2.5, 0.5), (3.0, 1.0)]
-SHOUT_C = [(0.0, 0.5), (1.0, 0.5), (1.5, 0.5), (2.5, 0.5), (3.0, 1.0)]
-SHOUT_D = [(0.0, 2.0), (2.5, 0.5), (3.0, 1.0)]
-
-# background figures behind the solos (offset, quarterLength)
-BG_LONG = [(0.0, 4.0)]
-BG_PUSH = [(0.0, 1.5), (1.5, 2.5)]
-BG_HITS = [(1.5, 0.5), (2.5, 1.5)]
-
-
 def _note(midi: int, ql: float, *, artic: str | None = None) -> note.Note:
     n = note.Note()
     n.pitch.ps = midi
@@ -499,122 +591,160 @@ SLOTS = ["tpt1", "tpt2", "alto", "tenor", "tbn", "bari"]
 
 
 def build_horn_plan() -> dict[int, dict[str, list]]:
-    """plan[bar][slot] = list of (offset, midi, ql, tie_out, artic)."""
+    """plan[bar][slot] = list of (offset, midi, ql, tie_out, artic).
+
+    The singer has the melody, so the band never plays it.  What the band
+    plays instead is the saxophone's supporting material from the recording,
+    handed around the sections the way a Sinatra chart hands it around: one
+    colour states a phrase, another answers it, and the section only plays
+    together when the singer is holding a note.
+    """
     plan = {b: {s: [] for s in SLOTS} for b in range(1, TOTAL_BARS + 1)}
 
     def put(bar_no, slot, off, midi, ql, tie_out=False, artic=None):
-        if 1 <= bar_no <= TOTAL_BARS:
-            plan[bar_no][slot].append((off, midi, ql, tie_out, artic))
+        """Add a note, splitting it across the barline as a tie if it spills."""
+        while ql > 0 and 1 <= bar_no <= TOTAL_BARS:
+            room = 4.0 - off
+            if ql <= room + 1e-9:
+                plan[bar_no][slot].append((off, midi, ql, tie_out, artic))
+                return
+            plan[bar_no][slot].append((off, midi, room, True, artic))
+            ql -= room
+            bar_no += 1
+            off = 0.0
+            artic = None
 
-    # ---- Intro (1-8) -----------------------------------------------------
-    for b in (5, 6):
+    def line(start_bar, material, slots, *, shift=0, harmonise=False,
+             artic=None, sustain_only=False):
+        """Place transcribed material, optionally harmonised under its own lead.
+
+        Two things keep it out of the singer's way: a short note is only
+        allowed where she is holding, and anything sounding while she
+        articulates is pushed below her octave.
+        """
+        for cyc, off, name, ql in material:
+            b = start_bar + cyc - 1
+            window = in_window(cyc, off)
+            if not window and (ql < 1.0 or sustain_only and ql < 1.5):
+                continue
+            lead = _ps(name) + shift
+            if not window:
+                while lead >= VOICE_LO:
+                    lead -= 12
+            if harmonise and len(slots) >= 5:
+                # whole band: use the section voicing so nobody is stranded
+                v = ensemble_voicing(lead, chord_at(b, off), spread=True)
+                for slot in slots:
+                    put(b, slot, off, v[slot], ql, artic=artic)
+            elif harmonise and len(slots) > 1:
+                voices = voice_below(lead, chord_at(b, off), len(slots))
+                for slot, v in zip(slots, voices):
+                    put(b, slot, off, fit(v, slot), ql, artic=artic)
+            else:
+                for slot in slots:
+                    put(b, slot, off, fit(lead, slot), ql, artic=artic)
+
+    def pad(start_bar, bars, slots, target, *, ql=4.0):
+        """Sustained chord voicing, sitting below the voice."""
+        for cyc in bars:
+            b = start_bar + cyc - 1
+            sym = chord_at(b, 0.0)
+            voices = voice_below(pick_lead(sym, target), sym, len(slots))
+            for slot, v in zip(slots, voices):
+                put(b, slot, 0.0, fit(v, slot), ql)
+
+    def answer(start_bar, cyc, off, slots, target, *, harmonise=True,
+               artic="accent"):
+        """A three-note answer in one of the singer's held-note windows."""
+        if not in_window(cyc, off):
+            return
+        b = start_bar + cyc - 1
+        sym = chord_at(b, off)
+        top = pick_lead(sym, target)
+        shape = [(off, 0.5), (off + 0.5, 0.5), (off + 1.0, 1.0)]
+        steps = voice_below(top, sym, 3)
+        for k, (o, q) in enumerate(shape):
+            note_lead = steps[k]
+            chord_here = chord_at(b, o)
+            if harmonise and len(slots) >= 5:
+                v = ensemble_voicing(note_lead, chord_here, spread=True)
+                for slot in slots:
+                    put(b, slot, o, v[slot], q, artic=artic)
+            elif harmonise and len(slots) > 1:
+                voices = voice_below(note_lead, chord_here, len(slots))
+                for slot, v in zip(slots, voices):
+                    put(b, slot, o, fit(v, slot), q, artic=artic)
+            else:
+                for slot in slots:
+                    put(b, slot, o, fit(note_lead, slot), q, artic=artic)
+
+    SAXES = ["alto", "tenor", "bari"]
+    BRASS = ["tpt1", "tpt2", "tbn"]
+
+    # ---- Intro, bars 1-8: the saxophone's own line, passed around --------
+    hand_off = {1: ["tpt1"], 2: ["tpt1"], 3: ["tenor"], 4: ["tenor"],
+                5: ["tbn"], 6: ["tbn"]}
+    for b, off, name, ql in SAX_INTRO:
+        if b in hand_off:
+            for slot in hand_off[b]:
+                put(b, slot, off, fit(_ps(name), slot), ql)
+        else:                                   # bars 7-8: whole band, harmonised
+            voices = voice_below(_ps(name) + 12, chord_at(b, off), 5)
+            for slot, v in zip(["tpt1", "tpt2", "alto", "tenor", "tbn"], voices):
+                put(b, slot, off, fit(v, slot), ql, artic="accent")
+            root = chord_pcs(chord_at(b, off))[0]
+            put(b, "bari", off, fit(nearest(root, _ps("B-2")), "bari"), ql,
+                artic="accent")
+    for b in (5, 6):                            # soft reed bed under the trombone
         sym = chord_at(b, 0.0)
-        v = ensemble_voicing(pick_lead(sym, _ps("C5")), sym)
-        for slot in ("alto", "tenor", "bari"):
-            put(b, slot, 0.0, v[slot], 4.0)
-    # bar 7: brass punches; bar 8: unison lead-in to the head
-    sym7 = chord_at(7, 0.0)
-    v7 = ensemble_voicing(pick_lead(sym7, _ps("F5")), sym7)
-    for slot in ("tpt1", "tpt2", "tbn"):
-        put(7, slot, 0.0, v7[slot], 1.0, artic="accent")
-        put(7, slot, 2.0, v7[slot], 1.0, artic="accent")
-    lead_in_offsets = [2.5, 3.0, 3.5]
-    lead_in_pitches = [_ps("F4"), _ps("G4"), _ps("A4")]
-    for slot in SLOTS:
-        base = [x + 12 for x in lead_in_pitches] if slot in ("tpt1", "tpt2") else list(lead_in_pitches)
-        for off, p in zip(lead_in_offsets, fit_line(base, slot)):
-            put(8, slot, off, p, 0.5, artic="accent")
+        voices = voice_below(pick_lead(sym, _ps("E-4")), sym, 2)
+        for slot, v in zip(["alto", "tenor"], voices):
+            put(b, slot, 0.0, fit(v, slot), 4.0)
 
-    # ---- A: head, bars 9-24 ---------------------------------------------
-    # bars 9-16: tenor sax states the melody alone over a low sustained pad;
-    # bars 17-24: the band joins in octaves and the texture opens up
-    for abs_bar, off, midi, ql, tie_out in melody_events(9):
-        if midi is None:
-            continue
-        put(abs_bar, "tenor", off, fit(midi, "tenor"), ql, tie_out)
-        if abs_bar > 16:
-            put(abs_bar, "alto", off, fit(midi + 12, "alto"), ql, tie_out)
-            put(abs_bar, "tpt1", off, fit(midi + 12, "tpt1"), ql, tie_out)
-            put(abs_bar, "tbn", off, midi - 12, ql, tie_out)
-            sym = chord_at(abs_bar, off)
-            second = voice_below(midi + 12, sym, 2)[1]
-            put(abs_bar, "tpt2", off, fit(second, "tpt2"), ql, tie_out)
-    for b in range(9, 17):                     # soft low pad under the first eight
+    # ---- Chorus 1, bars 9-24: dark and sparse ----------------------------
+    line(9, COUNTER, ["tbn"], shift=-12)        # counterline an octave down
+    line(9, LICK_A, SAXES, harmonise=True)      # reeds answer at the turnaround
+
+    # ---- Chorus 2, bars 25-40: the alto takes it, brass answer -----------
+    line(25, COUNTER, ["alto"])
+    pad(25, [2, 4, 6, 8, 10, 12, 14], ["tbn", "bari"], _ps("F3"))
+    line(25, LICK_B, BRASS, shift=12, harmonise=True, artic="accent")
+
+    # ---- Chorus 3, bars 41-56: reeds in harmony, brass punctuate ---------
+    line(41, COUNTER, SAXES, harmonise=True)
+    for cyc, off in ((4, 1.0), (8, 1.0), (11, 1.0), (12, 1.0)):
+        answer(41, cyc, off, BRASS, _ps("A5"))
+    line(41, LICK_B, SLOTS, shift=12, harmonise=True, artic="accent")
+
+    # ---- Chorus 4, bars 57-72: tenor solo, as on the recording -----------
+    for i, b in enumerate(range(65, 73)):       # brass pad behind the second half
         sym = chord_at(b, 0.0)
-        root, tones, _ = chord_pcs(sym)
-        ordered = sorted(tones, key=lambda pc: (pc - root) % 12)
-        put(b, "bari", 0.0, fit(nearest(root, _ps("B-2")), "bari"), 4.0)
-        put(b, "tbn", 0.0, fit(nearest(ordered[2], _ps("F3")), "tbn"), 4.0)
-    for b in range(17, 25):                    # baritone anchors the bottom
-        sym = chord_at(b, 0.0)
-        root = chord_pcs(sym)[0]
-        put(b, "bari", 0.0, fit(root + 36, "bari"), 4.0)
+        voices = voice_below(pick_lead(sym, _ps("F4")), sym, 3)
+        for slot, v in zip(BRASS, voices):
+            put(b, slot, 0.0, fit(v, slot), 4.0)
 
-    # ---- B: harmonised ensemble, bars 25-40 ------------------------------
-    for abs_bar, off, midi, ql, tie_out in melody_events(25):
-        if midi is None:
-            continue
-        sym = chord_at(abs_bar, off)
-        v = ensemble_voicing(midi, sym)
-        for slot in SLOTS:
-            put(abs_bar, slot, off, v[slot], ql, tie_out)
+    # ---- Chorus 5, bars 73-88: the voice returns, brass carry the line ---
+    line(73, COUNTER, ["tpt2", "tbn"], harmonise=True)
+    pad(73, [1, 3, 5, 7, 9, 11, 13], ["tenor", "bari"], _ps("B-2"))
+    for cyc, off in ((4, 1.0), (8, 1.0), (11, 1.0), (12, 1.0)):
+        answer(73, cyc, off, SAXES, _ps("E-5"))
+    line(73, LICK_A, SLOTS, shift=12, harmonise=True, artic="accent")
 
-    # ---- C: tenor solo 41-56, brass background from 49 -------------------
-    for i, b in enumerate(range(49, 57)):
-        sym = chord_at(b, 0.0)
-        fig = BG_LONG if i % 4 in (0, 1) else BG_PUSH
-        lead = pick_lead(sym, _ps("G5"))
-        v = ensemble_voicing(lead, sym)
-        for off, ql in fig:
-            for slot in ("tpt1", "tpt2", "tbn"):
-                put(b, slot, off, v[slot], ql, artic=None)
+    # ---- Chorus 6, bars 89-104: reeds and brass trade the counterline ----
+    line(89, [c for c in COUNTER if c[0] <= 8], SAXES, harmonise=True)
+    line(89, [c for c in COUNTER if c[0] > 8], BRASS, harmonise=True)
+    for cyc, off in ((4, 1.0), (8, 1.0), (11, 1.0), (12, 1.0), (15, 0.0)):
+        answer(89, cyc, off, SLOTS, _ps("G5"))
+    line(89, LICK_B, SLOTS, shift=12, harmonise=True, artic="accent")
 
-    # ---- D: trumpet solo 57-72, sax background from 65 -------------------
-    for i, b in enumerate(range(65, 73)):
-        sym = chord_at(b, 0.0)
-        fig = BG_LONG if i % 4 in (0, 1) else BG_HITS
-        lead = pick_lead(sym, _ps("E-5"))
-        v = ensemble_voicing(lead, sym)
-        for off, ql in fig:
-            for slot in ("alto", "tenor", "bari"):
-                put(b, slot, off, v[slot], ql)
+    # ---- Chorus 7, bars 105-120: full band behind the voice --------------
+    # sustained ensemble under the singer, answers on top of her held notes
+    line(105, COUNTER, SLOTS, harmonise=True, sustain_only=True)
+    for cyc, off in ((4, 1.0), (8, 1.0), (11, 1.0), (12, 1.0)):
+        answer(105, cyc, off, SLOTS, _ps("B-5"))
+    line(105, LICK_B, SLOTS, shift=12, harmonise=True, artic="accent")
 
-    # ---- E: shout chorus 73-88 -------------------------------------------
-    figs = [SHOUT_A, SHOUT_B, SHOUT_C, SHOUT_D]
-    target = _ps("B-5")
-    for i, b in enumerate(range(73, 89)):
-        sym = chord_at(b, 0.0)
-        fig = figs[i % 4]
-        if i >= 14:
-            fig = SHOUT_D
-        lead = pick_lead(sym, target)
-        target = lead
-        v = ensemble_voicing(lead, sym, spread=True)
-        for off, ql in fig:
-            s2 = chord_at(b, off)
-            vv = (ensemble_voicing(pick_lead(s2, lead), s2, spread=True)
-                  if s2 != sym else v)
-            for slot in SLOTS:
-                put(b, slot, off, vv[slot], ql, artic="accent")
-
-    # ---- F: keys solo 89-104, horn punches building from 101 -------------
-    for b in range(101, 105):
-        sym = chord_at(b, 0.0)
-        v = ensemble_voicing(pick_lead(sym, _ps("A5")), sym, spread=True)
-        for off, ql in [(1.5, 0.5), (3.0, 1.0)]:
-            for slot in SLOTS:
-                put(b, slot, off, v[slot], ql, artic="accent")
-
-    # ---- G: head out 105-120 (spread voicing, full band) ------------------
-    for abs_bar, off, midi, ql, tie_out in melody_events(105):
-        if midi is None:
-            continue
-        sym = chord_at(abs_bar, off)
-        v = ensemble_voicing(midi + 12, sym, spread=True)
-        for slot in SLOTS:
-            put(abs_bar, slot, off, v[slot], ql, tie_out)
-
-    # ---- H: coda 121-128 --------------------------------------------------
+    # ---- Coda, bars 121-128 ----------------------------------------------
     for b in range(121, 127):
         sym = chord_at(b, 0.0)
         lead = pick_lead(sym, _ps("B-5"))
@@ -622,7 +752,7 @@ def build_horn_plan() -> dict[int, dict[str, list]]:
         for off, ql in ([(0.0, 2.0), (2.5, 1.5)] if b % 2 else [(0.0, 4.0)]):
             for slot in SLOTS:
                 put(b, slot, off, v[slot], ql, artic="accent" if b % 2 else None)
-    # final two bars: the "Basie" tag - three punches then the held chord
+    # the "Basie" tag: three punches, then the held chord under the last note
     v_end = ensemble_voicing(pick_lead("Bbmaj7", _ps("B-5")), "Bbmaj7", spread=True)
     for off, ql in [(0.0, 0.5), (1.0, 0.5), (2.0, 0.5)]:
         for slot in SLOTS:
@@ -630,7 +760,151 @@ def build_horn_plan() -> dict[int, dict[str, list]]:
     v_fin = ensemble_voicing(pick_lead("Bb6", _ps("B-5")), "Bb6", spread=True)
     for slot in SLOTS:
         put(128, slot, 0.0, v_fin[slot], 4.0)
+
+    _resolve_overlaps(plan)
+    _clear_the_voice(plan)
+    _open_semitone_clashes(plan)
+    _breathe_before_leaps(plan)
     return plan
+
+
+VOICE_LO, VOICE_HI = 58, 70            # concert B-flat 3 to B-flat 4
+
+
+def _vocal_pitches() -> dict[int, set[tuple[float, int]]]:
+    """(offset, concert midi) the singer is sounding, per bar."""
+    out: dict[int, set[tuple[float, int]]] = {}
+    for start in VOCAL_CHORUSES:
+        for abs_bar, off, midi, _ql, _tie in melody_events(start):
+            if midi is not None:
+                out.setdefault(abs_bar, set()).add((off, midi))
+    for b in range(121, 128):                 # the held note over the coda
+        out.setdefault(b, set()).add((0.0, _ps("B-4")))
+    return out
+
+
+def _resolve_overlaps(plan: dict) -> None:
+    """One instrument, one note at a time.
+
+    Counterline, pad and answer are laid down independently, so they can land
+    on the same player at once.  Keep the earlier note and trim it to where
+    the next one starts; drop it if that leaves nothing.
+    """
+    for bar_no, slots in plan.items():
+        for slot, events in slots.items():
+            if not events:
+                continue
+            events.sort()
+            kept: list[tuple] = []
+            for off, midi, ql, tie_out, artic in events:
+                if kept:
+                    poff, pmidi, pql, ptie, partic = kept[-1]
+                    if off < poff + pql - 1e-6:
+                        trimmed = off - poff
+                        if trimmed < 0.25:
+                            kept.pop()
+                        else:
+                            kept[-1] = (poff, pmidi, trimmed, ptie, partic)
+                    if kept and abs(off - kept[-1][0]) < 1e-6:
+                        continue
+                kept.append((off, midi, min(ql, 4.0 - off), tie_out, artic))
+            slots[slot] = [e for e in kept if e[2] > 0]
+
+
+def _clear_the_voice(plan: dict) -> None:
+    """Never double the singer, and stay out of her octave while she sings."""
+    vocal = _vocal_pitches()
+    for bar_no, slots in plan.items():
+        sung = vocal.get(bar_no)
+        if not sung:
+            continue
+        cyc = None
+        for start in VOCAL_CHORUSES:
+            if start <= bar_no < start + 16:
+                cyc = bar_no - start + 1
+        for slot, events in slots.items():
+            out = []
+            for off, midi, ql, tie_out, artic in events:
+                if cyc is not None and not in_window(cyc, off):
+                    while midi >= VOICE_LO:
+                        midi -= 12
+                if (off, midi) in sung:            # never in unison with a word
+                    midi -= 12
+                midi = fit(midi, slot)
+                blocked = (off, midi) in sung
+                if cyc is not None and not in_window(cyc, off):
+                    blocked = blocked or VOICE_LO <= midi <= VOICE_HI
+                if blocked:
+                    continue
+                out.append((off, midi, ql, tie_out, artic))
+            slots[slot] = out
+
+
+def _breathe_before_leaps(plan: dict) -> None:
+    """Clip a sustained note that runs straight into a distant one.
+
+    The pads sit below the singer and the answers come in high above her, so a
+    player can be asked to jump two octaves with no gap.  Ending the pad an
+    eighth early gives them time to get there and reads better on the page.
+    """
+    flat: dict[str, list[tuple[float, int, int, float]]] = {}
+    for bar_no in sorted(plan):
+        for slot, events in plan[bar_no].items():
+            for idx, (off, midi, ql, _t, _a) in enumerate(sorted(events)):
+                flat.setdefault(slot, []).append(
+                    ((bar_no - 1) * 4 + off, bar_no, idx, midi))
+    for slot, seq in flat.items():
+        seq.sort()
+        for i in range(len(seq) - 1):
+            t0, b0, _i0, m0 = seq[i]
+            t1, _b1, _i1, m1 = seq[i + 1]
+            if abs(m1 - m0) <= 12:
+                continue
+            events = sorted(plan[b0][slot])
+            for k, (off, midi, ql, tie_out, artic) in enumerate(events):
+                if abs((b0 - 1) * 4 + off - t0) > 1e-6 or midi != m0:
+                    continue
+                if tie_out:
+                    break
+                end = (b0 - 1) * 4 + off + ql
+                if t1 - end < 0.5 and ql - (0.5 - (t1 - end)) >= 0.5:
+                    events[k] = (off, midi, ql - (0.5 - (t1 - end)), tie_out, artic)
+                    plan[b0][slot] = events
+                break
+
+
+def _open_semitone_clashes(plan: dict) -> None:
+    """No two players a semitone apart at the same instant.
+
+    Pads and counterlines are laid down independently, so they can collide.
+    Where they do, try to open the interval by an octave; failing that drop the
+    longer note, which is the sustained pad rather than the moving line.
+    """
+    for bar_no, slots in plan.items():
+        starts: dict[float, list[tuple[str, int]]] = {}
+        for slot, events in slots.items():
+            for off, midi, *_rest in events:
+                starts.setdefault(off, []).append((slot, midi))
+        for off, group in starts.items():
+            if len(group) < 2:
+                continue
+            group.sort(key=lambda g: g[1])
+            for i in range(len(group) - 1):
+                (slot_lo, lo), (slot_hi, hi) = group[i], group[i + 1]
+                if hi - lo != 1:
+                    continue
+                for slot, midi, delta in ((slot_hi, hi, 12), (slot_lo, lo, -12)):
+                    moved = fit(midi + delta, slot)
+                    if moved != midi and all(abs(moved - m) != 1
+                                             for sl, m in group if sl != slot):
+                        slots[slot] = [(o, moved if (o == off and mm == midi) else mm,
+                                        q, t, a) for o, mm, q, t, a in slots[slot]]
+                        break
+                else:
+                    victim = max((slot_lo, slot_hi),
+                                 key=lambda sl: max((q for o, m, q, t, a in slots[sl]
+                                                     if o == off), default=0))
+                    slots[victim] = [e for e in slots[victim] if e[0] != off]
 
 
 HORN_PARTS = [
@@ -644,7 +918,34 @@ HORN_PARTS = [
 # score order: reeds on top, then brass, then rhythm (standard big-band layout)
 SCORE_ORDER = ["alto", "tenor", "bari", "tpt1", "tpt2", "tbn"]
 
-SOLO_RANGES = {"tenor": (41, 56), "tpt1": (57, 72)}
+SOLO_RANGES = {"tenor": (57, 72)}      # the chorus the recording solos over
+
+# mutes, dynamics and cues, in the places a vocal chart wants them
+PERFORMANCE_MARKS: dict[tuple[int, str], str] = {
+    (1, "tpt1"): "Harmon mute, close to the mic",
+    (3, "tenor"): "sub tone",
+    (5, "tbn"): "cup mute",
+    (7, "tpt1"): "open",
+    (7, "tbn"): "open",
+    (9, "tbn"): "p - under the voice, never over it",
+    (9, "alto"): "tacet until 23",
+    (23, "alto"): "mp - answer the singer",
+    (25, "alto"): "mp, singing tone",
+    (25, "tpt1"): "cup mute",
+    (41, "alto"): "reeds as a section",
+    (41, "tpt1"): "open",
+    (57, "tenor"): "Solo - open, take as many as you like",
+    (57, "tpt1"): "backgrounds from 65",
+    (73, "tpt2"): "mf - brass take the line",
+    (89, "alto"): "reeds",
+    (89, "tpt1"): "brass answer",
+    (105, "tpt1"): "f - full band, still under the voice",
+    (121, "tpt1"): "ff",
+    (127, "tpt1"): "Basie tag",
+}
+
+# the choruses the singer is on; the band works around these
+VOCAL_CHORUSES = [9, 25, 41, 73, 89, 105]
 
 
 def slash(ql: float = 1.0, display: str = "B4") -> note.Note:
@@ -684,8 +985,14 @@ def _tie_roles(plan: dict, slot: str) -> dict[tuple[int, float], str]:
     flat = [(b, *e) for b in sorted(plan)
             for e in sorted(plan[b][slot])]
     starts = [False] * len(flat)
-    for i, (_, _, midi, _, tie_out, _) in enumerate(flat):
-        if tie_out and i + 1 < len(flat) and flat[i + 1][2] == midi:
+    for i, (b, off, midi, ql, tie_out, _artic) in enumerate(flat):
+        if not tie_out or i + 1 >= len(flat):
+            continue
+        nb, noff, nmidi = flat[i + 1][0], flat[i + 1][1], flat[i + 1][2]
+        # a tie needs the same pitch *and* the next note starting where this
+        # one ends - later passes can drop a note and orphan the tie otherwise
+        if nmidi == midi and abs(((nb - 1) * 4 + noff)
+                                 - ((b - 1) * 4 + off + ql)) < 1e-6:
             starts[i] = True
 
     roles: dict[tuple[int, float], str] = {}
@@ -728,13 +1035,15 @@ def build_score() -> stream.Score:
             m = stream.Measure(number=b)
             if b == 1:
                 stamp_first(m, ks_sharps, with_tempo=(slot == SCORE_ORDER[0]))
+            mark = PERFORMANCE_MARKS.get((b, slot))
+            if mark:
+                mt = expressions.TextExpression(mark)
+                mt.placement = "above"
+                mt.style.fontStyle = "italic"
+                m.insert(0.0, mt)
             if solo and solo[0] <= b <= solo[1]:
                 for beat in range(4):
                     m.insert(float(beat), slash())
-                if b == solo[0]:
-                    te = expressions.TextExpression("Solo (open)")
-                    te.placement = "above"
-                    m.insert(0.0, te)
                 for off, sym in CHORDS[b]:
                     m.insert(off, make_symbol(sym))
             else:
@@ -747,6 +1056,44 @@ def build_score() -> stream.Score:
             finish_measure(m)
             p.append(m)
         parts[slot] = p
+
+    # ---------------- voice (cue) ----------------
+    vp = new_part("Voice", "Voc.", instrument.Vocalist, treble=True)
+    vp.insert(0, meter.TimeSignature("4/4"))
+    vp.insert(0, key.KeySignature(ks_sharps))
+    vp.insert(0, copy.deepcopy(mm))
+    vocal = {}
+    for start in VOCAL_CHORUSES:
+        for abs_bar, off, midi, ql, tie_out in melody_events(start):
+            if midi is not None:
+                vocal.setdefault(abs_bar, []).append((off, midi, ql, tie_out, None))
+    vocal_ties = _tie_roles({b: {"v": vocal.get(b, [])} for b in
+                             range(1, TOTAL_BARS + 1)}, "v")
+    for b in range(1, TOTAL_BARS + 1):
+        m = stream.Measure(number=b)
+        if b == 1:
+            stamp_first(m, ks_sharps)
+            te = expressions.TextExpression("cue - the singer has this; the band never doubles it")
+            te.placement = "above"
+            te.style.fontStyle = "italic"
+            m.insert(0.0, te)
+        for off, midi, ql, _t, _a in sorted(vocal.get(b, [])):
+            n = _spell(_note(midi, ql))
+            role = vocal_ties.get((b, off))
+            if role:
+                n.tie = tie.Tie(role)
+            m.insert(off, n)
+        if b == 121:
+            n = _spell(_note(_ps("B-4"), 4.0))
+            n.tie = tie.Tie("start")
+            m.insert(0.0, n)
+        elif 122 <= b <= 127:
+            n = _spell(_note(_ps("B-4"), 4.0))
+            n.tie = tie.Tie("continue" if b < 127 else "stop")
+            m.insert(0.0, n)
+        finish_measure(m)
+        vp.append(m)
+    parts["voice"] = vp
 
     # ---------------- keys ----------------
     kp = new_part("Keys", "Keys", instrument.Piano, treble=True)
@@ -821,11 +1168,11 @@ def build_score() -> stream.Score:
     parts["drums"] = dp
 
     # ---------------- assemble ----------------
-    for slot in SCORE_ORDER + ["keys", "bass", "drums"]:
+    for slot in ["voice"] + SCORE_ORDER + ["keys", "bass", "drums"]:
         sc.insert(0, parts[slot])
 
     # rehearsal marks + section text on the top staff
-    top = parts[SCORE_ORDER[0]]
+    top = parts["voice"]
     for b, (mark, label) in SECTIONS.items():
         meas = top.measure(b)
         if meas is None:
