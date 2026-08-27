@@ -133,9 +133,15 @@ player reads a pattern:
   mid-section, a full bar to set up the next one — and the bar after a fill
   takes a crash.
 
-There are 32 repeat markers across the part. The notes stay in the repeated
-measures, so it plays back correctly and still reads if an engraver ignores the
-marking.
+A `%` bar repeats the previous one, so it is genuinely empty — the notes are
+replaced by a `<forward>` that accounts for the bar's duration without printing
+anything. Leaving the notes in means a reader draws them *and* the repeat sign.
+
+The part also carries a real drumset: one `<score-instrument>` per kit piece
+with its General MIDI note, and every stroke tagged with the one it belongs to.
+Without that, a reader maps every unpitched note to the part's single
+instrument and stacks the whole kit on one line, whatever `display-step` says.
+Kick, snare, toms, ride, crash and hi-hat each sit on their own line or space.
 
 ## Three rules the code enforces
 
