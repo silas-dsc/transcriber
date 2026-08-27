@@ -1,8 +1,9 @@
-# Fly Me To The Moon — 10-piece big band
+# Fly Me To The Moon — 10-piece big band, for a singer
 
-An arrangement of the Bart Howard standard, written to match a specific
-backing-track recording rather than to a generic lead sheet. Everything about
-the chart — key, tempo, form, changes — was measured from the audio.
+A chart of the Bart Howard standard written to match a specific backing-track
+recording. **The singer has the melody, so the band never plays it.** What the
+band plays is the supporting material the saxophone plays on that recording,
+handed around the sections the way a Sinatra chart hands it around.
 
 ## Files
 
@@ -10,103 +11,109 @@ the chart — key, tempo, form, changes — was measured from the audio.
 
 | File | What it is |
 | ---- | ---------- |
-| `Fly Me To The Moon - 10-piece Big Band.musicxml` | Performance score, **transposed parts** — open this one in MuseScore and use *Parts* to extract individual books |
+| `Fly Me To The Moon - 10-piece Big Band.musicxml` | Performance score, **transposed parts** — open this in MuseScore and use *Parts* to extract individual books |
 | `Fly Me To The Moon - 10-piece Big Band (Concert Score).musicxml` | **Concert-pitch** score for the director |
 
 Both are plain MusicXML and open directly in MuseScore, Sibelius, Finale or
-Dorico. The scores themselves are not committed — they are deterministic
-output of the generator, and the repository already ignores `*.musicxml` as
-build output. Run the command at the bottom of this file to produce them.
+Dorico. The scores are not committed — they are deterministic output of the
+generator, and the repository already ignores `*.musicxml` as build output.
 
 ## Instrumentation
 
 ```
+Voice    cue staff — the singer; the band never doubles it
 Reeds    Alto Sax (E-flat) · Tenor Sax (B-flat) · Baritone Sax (E-flat)
 Brass    Trumpet 1 (B-flat) · Trumpet 2 (B-flat) · Trombone
 Rhythm   Keys · Bass · Drums
 ```
 
-Note this is the instrumentation exactly as specified, which totals **nine**
-players. Adding guitar to the rhythm section is the usual way to make it ten.
+Nine players plus the singer. The Voice staff is a cue: it is there so the band
+can see what they are working around, and so the fills land in the right place.
 
-## What the recording turned out to be
+## What is on the recording
 
-The supplied MP3 is a **rhythm-section play-along track** — the Demucs vocal
-stem is silent (RMS 0.0001), so there is no melody anywhere in the audio; it is
-bass, drums and comping only. The melody in this chart therefore comes from the
-published tune, transposed into the recording's key, and every note of it was
-checked against the changes measured from the audio.
+The backing track carries no melody — the isolated vocal stem is silent. It
+does carry a written saxophone part, and that is the model for this chart.
+Separating the track six ways with Demucs puts piano and guitar in their own
+stems and leaves the saxophone alone; transcribing it with pYIN shows two
+distinct behaviours:
+
+- a **sustained counterline** under where the vocal sits — long tones, one or
+  two a bar. 25 of its 27 notes are chord tones or tensions and the other two
+  are chromatic approaches, so it is written, not improvised;
+- **eighth-note licks at the turnaround**. 44% of the saxophone's notes fall in
+  bars 15–16 of the 16-bar cycle, which is only 12.5% of the bars — a
+  three-and-a-half-fold concentration. That is the band answering at the end of
+  each phrase, and it lands where the singer is holding.
+
+Both are transcribed pitch-for-pitch into the generator (`COUNTER`, `LICK_A`,
+`LICK_B`, `SAX_INTRO`) and everything the band plays is built from them.
 
 | Parameter | Value | How it was established |
 | --------- | ----- | ---------------------- |
-| Key | **B-flat major / G minor** | chroma + Krumhansl-Schmuckler (best major B-flat, r = 0.57); confirms the file's own `Gm` tag |
+| Key | **B-flat major / G minor** | chroma + Krumhansl-Schmuckler; confirms the file's own `Gm` tag |
 | Tempo | **120.000 BPM exactly** | onset-grid search over the isolated drum stem — an exact round number, so the track is sequenced |
-| Feel | Medium swing, 4/4 | — |
-| Downbeat | 0.600 s | 99 of 175 detected harmonic changes fall in one half-beat bin, with a second cluster exactly one half-bar later (chords change on beats 1 and 3) |
-| Form | 8-bar intro · **7 × 16-bar chorus** (bars 9–120) · 8-bar coda = **128 bars** | 16-bar cycle template-matched at every offset; it starts at bar 9 regardless of alignment |
+| Downbeat | 0.600 s | 99 of 175 harmonic changes fall in one half-beat bin |
+| Form | 8-bar intro · 7 × 16-bar chorus · 8-bar coda = **128 bars** | 16-bar cycle template-matched at every offset |
 
-## The changes
-
-Recovered by averaging beat-synchronous chroma of the Demucs comping stem
-across all seven choruses (which cancels the improvisation) and matching
-against chord templates, with roots taken from a pYIN transcription of the
-isolated bass stem:
+The changes, recovered by averaging chroma across all seven choruses with roots
+from the isolated bass:
 
 ```
-| Gm7    | Cm7 | F7  | B♭maj7 |
-| E♭maj7 | Am7♭5 | D7 | Gm7  G7 |
-| Cm7    | F7  | B♭maj7 | G7  |
-| Cm7    | F7  | B♭maj7 | D7  |      ← turnaround
+| Gm7    | Cm7   | F7     | B♭maj7 |
+| E♭maj7 | Am7♭5 | D7     | Gm7 G7 |
+| Cm7    | F7    | B♭maj7 | G7     |
+| Cm7    | F7    | B♭maj7 | D7     |   ← turnaround
 ```
 
-That is the standard progression of the tune, a whole tone below the common
-key of C. Confidence was high on the diagnostic bars — Cm7 0.95, D7 0.91,
-Gm7 0.88, Am7♭5 0.84.
-
-The chart's changes match the recording bar by bar at **z = 13.3** against a
-shuffled-alignment baseline (0.692 vs 0.550 ± 0.011).
+They match the recording bar by bar at **z = 13.3** against a shuffled-alignment
+baseline (0.692 vs 0.550 ± 0.011).
 
 ## Road map
 
-| Bars | Mark | Section |
-| ---- | ---- | ------- |
-| 1–8 | — | Intro: rhythm section, low sax pad from bar 5, brass punches in 7, full-band unison lead-in in 8 |
-| 9–24 | **A** | Head. Tenor sax states the melody over a low trombone/bari pad; at 17 the band joins in octaves |
-| 25–40 | **B** | Harmonised ensemble — six-part concerted, mid-register |
-| 41–56 | **C** | Tenor sax solo (open); brass backgrounds from 49 |
-| 57–72 | **D** | Trumpet solo (open); sax backgrounds from 65 |
-| 73–88 | **E** | Shout chorus |
-| 89–104 | **F** | Keys solo; horn punches build from 101 |
-| 105–120 | **G** | Head out, full band |
-| 121–128 | **H** | Coda — three-punch "Basie" tag into a held B♭6 |
+Each chorus gives the counterline to a different colour, and the answers come
+from whoever is not carrying it:
 
-Solo sections are written as slash notation with chord symbols, so they are
-open — take as many choruses as you like, or play them as written over the
-backing track.
+| Bars | Mark | Who has the line | Who answers |
+| ---- | ---- | ---------------- | ----------- |
+| 1–8 | — | Intro: the saxophone's own line, passed Harmon trumpet → tenor → cup trombone, whole band for the last two bars | |
+| 9–24 | **A** | Trombone, an octave down, *p* | Reeds, at the turnaround |
+| 25–40 | **B** | Alto | Brass, harmonised |
+| 41–56 | **C** | Reeds as a section | Brass punctuate |
+| 57–72 | **D** | *Tenor sax solo (open)* — the chorus the recording solos over | Brass pad from 65 |
+| 73–88 | **E** | Trumpet 2 and trombone | Reeds |
+| 89–104 | **F** | Reeds take the first half, brass the second | Whole band |
+| 105–120 | **G** | Whole band, sustained under the voice | Whole band, in every window |
+| 121–128 | **H** | Coda — swell under the last held note into the "Basie" tag | |
 
-## Two things the voicing engine does deliberately
+## Three rules the code enforces
 
-Both are ordinary big-band practice, and both are enforced in code:
+Staying out of a singer's way is the whole job, so it is checked rather than
+hoped for. On the finished score:
 
-- **Major 7th chords are voiced with the 6th, not the 7th.** In a close
-  voicing the root and major 7th collide a semitone apart. Substituting the
-  6th removes every such clash (verified: 0 adjacent semitones anywhere in the
-  score) and the major 7th stays available as a tension.
-- **An 11th in the lead suspends the chord.** The melody sits on B-flat over
-  F7 and on E-flat over B♭maj7; those are voiced as F7sus4 and B♭6sus4 rather
-  than mistaken for chromatic approach notes. Genuine chromatic approaches do
-  get the standard parallel diminished-7th treatment.
+| Rule | Result |
+| ---- | ------ |
+| the band never doubles the melody | **0** notes at the same beat and pitch as the voice |
+| nothing sits in the singer's octave while she articulates | **0** of 762 band notes in vocal choruses |
+| busy figures only where she is holding | **98%** of short notes fall inside a held-note window |
 
-With only one trombone covering six-part writing, the section uses two
-textures: a five-way close voicing for the mid-register harmonised chorus, and
-octave-doubled tiers (trumpets + alto on top, tenor and trombone doubling them
-an octave below) once the lead climbs for the shout chorus and head out. Every
-written part was range-checked:
+The windows come from the melody itself: a run of three or more eighths with no
+new syllable is somewhere an arranger can answer. Pads that would land in the
+singer's octave are pushed down an octave; anything that still collides is
+dropped.
+
+Also checked: 0 semitone clashes between simultaneous parts, 0 malformed bars,
+0 dangling ties, and every written part inside its comfortable range —
 
 ```
-Trumpet 1 A4–C6 · Trumpet 2 A3–A5 · Alto A4–D6
-Tenor A4–D6 · Trombone A2–B♭4 · Baritone A4–C6
+Voice A3–B♭4 · Alto D4–D6 · Tenor C4–C#6 · Baritone B3–B5
+Trumpet 1 G#3–C6 · Trumpet 2 G#3–A5 · Trombone F2–B♭4
 ```
+
+Two adjustments the voicing engine makes, both ordinary big-band practice:
+major 7th chords are voiced with the 6th so the root and 7th never collide, and
+an 11th in the lead suspends the chord rather than being mistaken for a
+chromatic approach.
 
 ## Regenerating
 
