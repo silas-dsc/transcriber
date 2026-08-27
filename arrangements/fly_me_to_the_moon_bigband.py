@@ -29,6 +29,13 @@ finished score:
     * busy figures only happen where she is holding a note, so an answer never
       competes with a word.
 
+There is one score, with the parts transposed.  MusicXML always stores
+*written* pitch, so a "concert pitch" file made by stripping each instrument's
+transposition is a trap: the notes become the sounding pitches but a reader
+still range-checks them as written pitch, and every transposing part shows up
+far below its staff in red.  Concert pitch is a display mode - in MuseScore it
+is the "Concert Pitch" button - not a separate file.
+
 Instrumentation:
     Voice   (cue staff - the singer, not played by the band)
     Reeds   Alto Sax (E-flat), Tenor Sax (B-flat), Baritone Sax (E-flat)
@@ -42,15 +49,19 @@ import copy
 
 from music21 import (
     bar,
+    chord,
     clef,
     duration,
     expressions,
     harmony,
     instrument,
+    interval,
     key,
+    layout,
     metadata,
     meter,
     note,
+    percussion,
     pitch,
     stream,
     tempo,
@@ -472,12 +483,12 @@ def walking_bass(bar_no: int, prev_last: int | None) -> list[int]:
         cand = pc + 12 * ((ref - pc) // 12)
         best, bd = cand, 99
         for c in (cand - 12, cand, cand + 12):
-            if _ps("E1") <= c <= _ps("G3") and abs(c - ref) < bd:
+            if _ps("E1") <= c <= _ps("C3") and abs(c - ref) < bd:
                 best, bd = c, abs(c - ref)
         return best
 
     root0 = chord_pcs(syms[0])[0]
-    ref = prev_last if prev_last is not None else _ps("G2")
+    ref = prev_last if prev_last is not None else _ps("B-1")
     b1 = near(root0, ref)
     line = [b1]
 
@@ -497,7 +508,156 @@ def walking_bass(bar_no: int, prev_last: int | None) -> list[int]:
         tgt = near(nxt_root, line[-1])
         approach = tgt - 1 if tgt >= line[-1] else tgt + 1
         line.append(approach)
-    return [max(_ps("E1"), min(_ps("A3"), p)) for p in line]
+    return [max(_ps("E1"), min(_ps("C3"), p)) for p in line]
+
+
+# --------------------------------------------------------------------------
+# Piano
+# --------------------------------------------------------------------------
+
+def piano_voicing(sym: str) -> tuple[list[int], list[int]]:
+    """A rootless right hand over a left-hand root, the way a jazz pianist comps.
+
+    The bass already has the root, so the right hand takes the chord tones
+    above it plus the 9th and leaves the root alone; the left hand puts a bare
+    root underneath.
+    """
+    root, tones, _tens = chord_pcs(sym)
+    ninth = (root + 2) % 12
+    wanted = {t for t in tones if t != root} | {ninth}
+    floor = _ps("B-3")
+    rh = sorted({pc + 12 * ((floor - pc + 11) // 12) for pc in wanted})
+    rh = [p if p >= floor else p + 12 for p in rh][:4]
+    return sorted(rh), [nearest(root, _ps("F2"))]
+
+
+def piano_fill(sym: str, off: float) -> list[tuple[float, int, float]]:
+    """Four descending eighths out of the voicing - a plain right-hand fill."""
+    rh, _ = piano_voicing(sym)
+    tops = sorted(rh, reverse=True)
+    while len(tops) < 4:
+        tops.append(tops[-1] - 12)
+    return [(off + i * 0.5, tops[i] + 12, 0.5) for i in range(4)]
+
+
+# bars where the piano plays something written rather than comping: the intro,
+# a handful of gaps where the horns are thin, and the ending
+PIANO_WRITTEN = [1, 2, 3, 4]
+PIANO_FILLS = {12: 2.0, 20: 2.0, 36: 2.0, 100: 2.0, 116: 2.0}
+
+
+# --------------------------------------------------------------------------
+# Drums
+# --------------------------------------------------------------------------
+
+# General MIDI note for each kit piece, keyed by where it sits on the staff.
+# Without a drumset in the part list a reader maps every unpitched note to the
+# part's single instrument and stacks the whole kit on one line.
+DRUMSET = {
+    ("A", 5): ("Crash Cymbal", 49),
+    ("G", 5): ("Closed Hi-Hat", 42),
+    ("F", 5): ("Ride Cymbal", 51),
+    ("E", 5): ("High Tom", 48),
+    ("D", 5): ("Mid Tom", 47),
+    ("C", 5): ("Snare Drum", 38),
+    ("A", 4): ("Floor Tom", 43),
+    ("F", 4): ("Bass Drum", 36),
+    ("D", 4): ("Hi-Hat Pedal", 44),
+}
+
+# where each piece of the kit sits on the percussion staff, and its notehead
+KIT = {
+    "crash":   ("A5", "x"),
+    "hh":      ("G5", "x"),      # hi-hat played with a stick
+    "ride":    ("F5", "x"),
+    "tom_hi":  ("E5", None),
+    "tom_mid": ("D5", None),
+    "snare":   ("C5", None),
+    "tom_lo":  ("A4", None),
+    "bd":      ("F4", None),
+    "hhped":   ("D4", "x"),      # hi-hat closed with the foot
+}
+
+# (offset, pieces, quarterLength).  The ride pattern is the usual
+# "ding, ding-da-ding" - a quarter, then two swung eighths, twice a bar.
+GROOVE_BASIC_UP = [
+    (0.0, ["ride"], 1.0), (1.0, ["ride"], 0.5), (1.5, ["ride"], 0.5),
+    (2.0, ["ride"], 1.0), (3.0, ["ride"], 0.5), (3.5, ["ride"], 0.5),
+]
+GROOVE_BASIC_DOWN = [(1.0, ["hhped"], 1.0), (3.0, ["hhped"], 1.0)]
+
+# busier: the snare comps with the ride and the bass drum starts punctuating
+GROOVE_BUSY_UP = [
+    (0.0, ["ride"], 1.0), (1.0, ["ride"], 0.5), (1.5, ["ride", "snare"], 0.5),
+    (2.0, ["ride"], 1.0), (3.0, ["ride"], 0.5), (3.5, ["ride", "snare"], 0.5),
+]
+GROOVE_BUSY_DOWN = [
+    (0.0, ["bd"], 1.0), (1.0, ["hhped"], 1.0),
+    (2.5, ["bd"], 0.5), (3.0, ["hhped"], 1.0),
+]
+
+# half-bar fill: keep the ride going, answer on the snare and toms
+FILL_HALF_UP = [
+    (0.0, ["ride"], 1.0), (1.0, ["ride"], 0.5), (1.5, ["ride"], 0.5),
+    (2.0, ["snare"], 0.5), (2.5, ["snare"], 0.5),
+    (3.0, ["tom_mid"], 0.5), (3.5, ["tom_lo"], 0.5),
+]
+FILL_HALF_DOWN = [(1.0, ["hhped"], 1.0), (3.0, ["hhped"], 1.0)]
+
+# full-bar fill, to set up the next section
+FILL_FULL_UP = [
+    (0.0, ["snare"], 0.5), (0.5, ["snare"], 0.5),
+    (1.0, ["tom_hi"], 0.5), (1.5, ["snare"], 0.5),
+    (2.0, ["tom_mid"], 0.5), (2.5, ["tom_mid"], 0.5),
+    (3.0, ["tom_lo"], 0.5), (3.5, ["tom_lo"], 0.5),
+]
+FILL_FULL_DOWN = [(0.0, ["bd"], 1.0), (2.0, ["bd"], 1.0)]
+
+# section start -> which groove, and what to tell the player
+DRUM_SECTIONS = [
+    (1, 8, "basic", "Brushes - medium swing"),
+    (9, 16, "basic", "Brushes, soft under the voice"),
+    (25, 16, "busy", "Sticks"),
+    (41, 16, "busy", None),
+    (57, 16, "basic", "back off behind the solo"),
+    (73, 16, "busy", None),
+    (89, 16, "busy", None),
+    (105, 16, "busy", "build"),
+    (121, 8, "busy", None),
+]
+
+
+def drum_plan() -> tuple[dict[int, tuple], set[int]]:
+    """bar -> (upper voice, lower voice, crash?), plus the bars shown as %.
+
+    Each section states its groove in full for two bars and is then marked
+    with repeat signs, so the player reads a pattern rather than a wall of
+    identical bars.  Every eight bars that pattern is broken by a written-out
+    fill, and the bar after a fill gets a crash.
+    """
+    bars: dict[int, tuple] = {}
+    repeats: set[int] = set()
+    fills: set[int] = set()
+    for start, length, kind, _text in DRUM_SECTIONS:
+        up = GROOVE_BUSY_UP if kind == "busy" else GROOVE_BASIC_UP
+        down = GROOVE_BUSY_DOWN if kind == "busy" else GROOVE_BASIC_DOWN
+        last = start + length - 1
+        for b in range(start, last + 1):
+            if b > TOTAL_BARS:
+                break
+            idx = b - start
+            if b == last:                                   # set up what follows
+                bars[b] = (FILL_FULL_UP, FILL_FULL_DOWN)
+                fills.add(b)
+            elif idx == 7:                                  # mid-section fill
+                bars[b] = (FILL_HALF_UP, FILL_HALF_DOWN)
+                fills.add(b)
+            else:
+                bars[b] = (up, down)
+                if idx >= 2:
+                    repeats.add(b)
+    crashes = {b + 1 for b in fills if b + 1 <= TOTAL_BARS}
+    return {b: (u, d, b in crashes) for b, (u, d) in bars.items()}, repeats
 
 
 # --------------------------------------------------------------------------
@@ -578,12 +738,23 @@ def _note(midi: int, ql: float, *, artic: str | None = None) -> note.Note:
     return n
 
 
-def _spell(n: note.Note, flats: bool = True) -> note.Note:
-    """Prefer flat spellings, which suit B-flat major / G minor."""
-    p = n.pitch
-    if p.accidental is not None and p.accidental.alter > 0 and flats:
-        if p.name not in ("F#", "C#"):
-            n.pitch = p.getEnharmonic()
+def _spell(n, flats: bool = True):
+    """Prefer flat spellings, which suit B-flat major / G minor.
+
+    Takes a note or a chord; F-sharp and C-sharp stay sharp because they are
+    the leading tones of D7 and A7 rather than flattened scale degrees.
+    """
+    pitches = list(n.pitches) if isinstance(n, chord.Chord) else [n.pitch]
+    respelled = []
+    for p in pitches:
+        if (flats and p.accidental is not None and p.accidental.alter > 0
+                and p.name not in ("F#", "C#")):
+            p = p.getEnharmonic()
+        respelled.append(p)
+    if isinstance(n, chord.Chord):
+        n.pitches = tuple(respelled)
+    else:
+        n.pitch = respelled[0]
     return n
 
 
@@ -1095,29 +1266,78 @@ def build_score() -> stream.Score:
         vp.append(m)
     parts["voice"] = vp
 
-    # ---------------- keys ----------------
-    kp = new_part("Keys", "Keys", instrument.Piano, treble=True)
-    kp.insert(0, meter.TimeSignature("4/4"))
-    kp.insert(0, key.KeySignature(ks_sharps))
-    kp.insert(0, copy.deepcopy(mm))
+    # ---------------- keys: a real grand staff ----------------
+    rh = stream.PartStaff()
+    rh.id = "KeysRH"
+    rh.partName = "Keys"
+    rh.partAbbreviation = "Keys"
+    rh.insert(0, instrument.Piano())
+    rh.insert(0, clef.TrebleClef())
+    rh.insert(0, meter.TimeSignature("4/4"))
+    rh.insert(0, key.KeySignature(ks_sharps))
+    rh.insert(0, copy.deepcopy(mm))
+
+    lh = stream.PartStaff()
+    lh.id = "KeysLH"
+    lh.partName = "Keys LH"
+    lh.partAbbreviation = ""
+    lh.insert(0, instrument.Piano())
+    lh.insert(0, clef.BassClef())
+    lh.insert(0, meter.TimeSignature("4/4"))
+    lh.insert(0, key.KeySignature(ks_sharps))
+
     for b in range(1, TOTAL_BARS + 1):
-        m = stream.Measure(number=b)
+        mr = stream.Measure(number=b)
+        ml = stream.Measure(number=b)
         if b == 1:
-            stamp_first(m, ks_sharps)
-        for off, sym in CHORDS[b]:
-            m.insert(off, make_symbol(sym))
-        for beat in range(4):
-            m.insert(float(beat), slash())
-        if b == 89:
-            te = expressions.TextExpression("Solo")
+            stamp_first(mr, ks_sharps)
+            stamp_first(ml, ks_sharps)
+            te = expressions.TextExpression("comp - slashes are a guide, not a rhythm")
             te.placement = "above"
-            m.insert(0.0, te)
-        finish_measure(m)
-        kp.append(m)
-    parts["keys"] = kp
+            te.style.fontStyle = "italic"
+            mr.insert(0.0, te)
+        for off, sym in CHORDS[b]:
+            mr.insert(off, make_symbol(sym))
+
+        sym = chord_at(b, 0.0)
+        if b in PIANO_WRITTEN or b >= TOTAL_BARS - 3:
+            voic, low = piano_voicing(sym)
+            ql = 4.0 if b >= TOTAL_BARS - 1 else 2.0
+            mr.insert(0.0, _spell(chord.Chord([_note(x, ql) for x in voic])))
+            ml.insert(0.0, _spell(_note(low[0], ql)))
+            if ql == 2.0:
+                sym2 = chord_at(b, 2.0)
+                voic2, low2 = piano_voicing(sym2)
+                mr.insert(2.0, _spell(chord.Chord([_note(x, 2.0) for x in voic2])))
+                ml.insert(2.0, _spell(_note(low2[0], 2.0)))
+        elif b in PIANO_FILLS:
+            off0 = PIANO_FILLS[b]
+            voic, low = piano_voicing(sym)
+            mr.insert(0.0, _spell(chord.Chord([_note(x, off0) for x in voic])))
+            for o, pmidi, q in piano_fill(chord_at(b, off0), off0):
+                mr.insert(o, _spell(_note(pmidi, q)))
+            ml.insert(0.0, _spell(_note(low[0], 4.0)))
+        else:
+            for beat in range(4):
+                mr.insert(float(beat), slash())
+                ml.insert(float(beat), slash(display="D3"))
+        if b == 57:
+            te = expressions.TextExpression("comp behind the solo")
+            te.placement = "above"
+            mr.insert(0.0, te)
+        finish_measure(mr)
+        finish_measure(ml)
+        rh.append(mr)
+        lh.append(ml)
+    parts["keysRH"] = rh
+    parts["keysLH"] = lh
 
     # ---------------- bass ----------------
     bp = new_part("Bass", "Bass", instrument.AcousticBass, treble=False)
+    # bass sounds an octave below where it is written; declaring that keeps the
+    # page in the normal bass-clef register and playback at the right pitch
+    for ins in bp.recurse().getElementsByClass(instrument.Instrument):
+        ins.transposition = interval.Interval("P-8")
     bp.insert(0, meter.TimeSignature("4/4"))
     bp.insert(0, key.KeySignature(ks_sharps))
     bp.insert(0, copy.deepcopy(mm))
@@ -1128,7 +1348,7 @@ def build_score() -> stream.Score:
             stamp_first(m, ks_sharps)
         if b == TOTAL_BARS:
             root = chord_pcs("Bb6")[0]
-            n = _spell(_note(nearest(root, _ps("B-2")), 4.0))
+            n = _spell(_note(nearest(root, _ps("B-1")), 4.0))
             m.insert(0.0, n)
         else:
             line = walking_bass(b, prev)
@@ -1151,25 +1371,68 @@ def build_score() -> stream.Score:
     dp.insert(0, clef.PercussionClef())
     dp.insert(0, meter.TimeSignature("4/4"))
     dp.insert(0, copy.deepcopy(mm))
+
+    def hit(pieces, ql, stem):
+        """One stroke - a chord when two pieces of the kit land together."""
+        made = []
+        for piece in pieces:
+            display, head = KIT[piece]
+            u = note.Unpitched(displayName=display)
+            if head:
+                u.notehead = head
+            made.append(u)
+        obj = made[0] if len(made) == 1 else percussion.PercussionChord(made)
+        obj.quarterLength = ql
+        obj.stemDirection = stem
+        return obj
+
+    plan_bars, repeat_bars = drum_plan()
+    section_text = {start: txt for start, _l, _k, txt in DRUM_SECTIONS if txt}
     for b in range(1, TOTAL_BARS + 1):
         m = stream.Measure(number=b)
         if b == 1:
             stamp_first(m, 0, perc=True)
+        if b in section_text:
+            te = expressions.TextExpression(section_text[b])
+            te.placement = "above"
+            te.style.fontStyle = "italic"
+            m.insert(0.0, te)
         if b == TOTAL_BARS:
-            u = note.Unpitched(displayName="G5")
-            u.quarterLength = 4.0
-            u.notehead = "x"
-            m.insert(0.0, u)
-        else:
-            for beat in range(4):
-                m.insert(float(beat), slash())
-        finish_measure(m)
+            vt = stream.Voice(id="1")
+            vb = stream.Voice(id="2")
+            vt.insert(0.0, hit(["crash"], 4.0, "up"))
+            vb.insert(0.0, hit(["bd"], 4.0, "down"))
+            for v in (vt, vb):
+                v.makeRests(fillGaps=True, inPlace=True,
+                            timeRangeFromBarDuration=True)
+                m.insert(0.0, v)
+            dp.append(m)
+            continue
+        up, down, crash = plan_bars[b]
+        v1 = stream.Voice(id="1")
+        v2 = stream.Voice(id="2")
+        for off, pieces, ql in up:
+            use = list(pieces)
+            if crash and off == 0.0:
+                use = ["crash"] + [x for x in use if x != "ride"]
+            v1.insert(off, hit(use, ql, "up"))
+        for off, pieces, ql in down:
+            v2.insert(off, hit(pieces, ql, "down"))
+        for v in (v1, v2):
+            v.makeRests(fillGaps=True, inPlace=True, timeRangeFromBarDuration=True)
+            m.insert(0.0, v)
         dp.append(m)
     parts["drums"] = dp
+    dp.repeatBarNumbers = sorted(repeat_bars)
 
     # ---------------- assemble ----------------
-    for slot in ["voice"] + SCORE_ORDER + ["keys", "bass", "drums"]:
+    for slot in ["voice"] + SCORE_ORDER + ["keysRH", "keysLH", "bass", "drums"]:
         sc.insert(0, parts[slot])
+    piano_group = layout.StaffGroup([parts["keysRH"], parts["keysLH"]],
+                                    name="Keys", abbreviation="Keys",
+                                    symbol="brace")
+    piano_group.barTogether = True
+    sc.insert(0, piano_group)
 
     # rehearsal marks + section text on the top staff
     top = parts["voice"]
@@ -1200,30 +1463,163 @@ def build_score() -> stream.Score:
     return sc
 
 
-def _concert_score(sc: stream.Score) -> stream.Score:
-    """A genuine concert-pitch score for the director.
-
-    MusicXML always stores *written* pitch, so music21 transposes on export.
-    Clearing each instrument's transposition makes written and sounding pitch
-    the same, which is exactly what a concert score is.
-    """
-    concert = copy.deepcopy(sc)
-    concert.metadata.movementName = (
-        "Arranged for 10-piece big band - CONCERT PITCH score")
-    for part in concert.parts:
-        for ins in part.recurse().getElementsByClass(instrument.Instrument):
-            ins.transposition = None
-        part.atSoundingPitch = False
-    concert.atSoundingPitch = False
-    return concert
-
-
 def _renumber_voices(sc: stream.Score) -> None:
     """MuseScore 4 rejects <voice>0</voice>; make every voice id 1-based."""
     for part in sc.parts:
         for measure in part.getElementsByClass(stream.Measure):
             for i, v in enumerate(measure.getElementsByClass(stream.Voice), start=1):
                 v.id = str(i)
+
+
+def build_drumset(path: str) -> None:
+    """Give the drum part a real kit.
+
+    music21 writes one ``<score-instrument>`` for the part, so every unpitched
+    note points at the same drum and a reader stacks the whole kit on one line
+    regardless of the ``display-step`` we asked for.  This replaces that single
+    entry with one instrument per piece and tags each note with the right one.
+    """
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(path)
+    root = tree.getroot()
+    drum_id = None
+    for sp in root.iter("score-part"):
+        if sp.findtext("part-name") == "Drums":
+            drum_id = sp.get("id")
+            for child in list(sp):
+                if child.tag in ("score-instrument", "midi-instrument"):
+                    sp.remove(child)
+            ids = {}
+            for (step, octv), (label, gm) in sorted(DRUMSET.items()):
+                iid = f"{drum_id}-{step}{octv}"
+                ids[(step, str(octv))] = iid
+                si = ET.SubElement(sp, "score-instrument")
+                si.set("id", iid)
+                ET.SubElement(si, "instrument-name").text = label
+                mi = ET.SubElement(sp, "midi-instrument")
+                mi.set("id", iid)
+                ET.SubElement(mi, "midi-channel").text = "10"
+                # MusicXML numbers MIDI notes from 1, so a GM note needs +1
+                ET.SubElement(mi, "midi-unpitched").text = str(gm + 1)
+            break
+    if drum_id is None:
+        return
+
+    for part in root.iter("part"):
+        if part.get("id") != drum_id:
+            continue
+        for n in part.iter("note"):
+            u = n.find("unpitched")
+            if u is None:
+                continue
+            key = (u.findtext("display-step"), u.findtext("display-octave"))
+            iid = ids.get(key)
+            if iid is None:
+                continue
+            el = ET.Element("instrument")
+            el.set("id", iid)
+            # <instrument> belongs after <duration>/<tie>, before <voice>
+            kids = list(n)
+            at = len(kids)
+            for i, child in enumerate(kids):
+                if child.tag in ("voice", "type", "dot", "accidental", "stem",
+                                 "notehead", "beam", "notations", "lyric"):
+                    at = i
+                    break
+            n.insert(at, el)
+    tree.write(path, encoding="UTF-8", xml_declaration=True)
+
+
+def clear_repeated_measures(path: str, bars: list[int]) -> None:
+    """A bar showing ``%`` repeats the previous one, so it must be otherwise
+    empty - a reader that finds notes there draws them *and* the repeat sign.
+
+    The measure still has to account for its full duration, so the notes are
+    replaced by a ``<forward>``, which advances time without printing.
+    """
+    import xml.etree.ElementTree as ET
+
+    if not bars:
+        return
+    wanted = set(bars)
+    tree = ET.parse(path)
+    root = tree.getroot()
+    drum_id = None
+    for sp in root.iter("score-part"):
+        if sp.findtext("part-name") == "Drums":
+            drum_id = sp.get("id")
+    if drum_id is None:
+        return
+    divisions = None
+    for part in root.iter("part"):
+        if part.get("id") != drum_id:
+            continue
+        for meas in part.iter("measure"):
+            d = meas.findtext("attributes/divisions")
+            if d:
+                divisions = int(d)
+            no = meas.get("number")
+            if not (no or "").isdigit() or int(no) not in wanted:
+                continue
+            for child in list(meas):
+                if child.tag in ("note", "backup", "forward"):
+                    meas.remove(child)
+            fwd = ET.SubElement(meas, "forward")
+            ET.SubElement(fwd, "duration").text = str((divisions or 10080) * 4)
+    tree.write(path, encoding="UTF-8", xml_declaration=True)
+
+
+def mark_measure_repeats(path: str, bars: list[int]) -> None:
+    """Turn the repeated drum bars into proper repeat signs.
+
+    music21 has no measure-repeat object, so the ``<measure-style>`` markers go
+    in afterwards: one at the head of each run of repeated bars and one on the
+    bar after it ends.  The notes stay in those measures, so the part plays
+    back correctly and still reads if the engraver ignores the marking.
+    """
+    import xml.etree.ElementTree as ET
+
+    if not bars:
+        return
+    wanted = sorted(bars)
+    runs, run = [], [wanted[0]]
+    for b in wanted[1:]:
+        if b == run[-1] + 1:
+            run.append(b)
+        else:
+            runs.append(run)
+            run = [b]
+    runs.append(run)
+
+    tree = ET.parse(path)
+    root = tree.getroot()
+    drum_id = None
+    for sp in root.iter("score-part"):
+        if sp.findtext("part-name") == "Drums":
+            drum_id = sp.get("id")
+    if drum_id is None:
+        return
+    for part in root.iter("part"):
+        if part.get("id") != drum_id:
+            continue
+        by_no = {int(m.get("number")): m for m in part.iter("measure")
+                 if (m.get("number") or "").isdigit()}
+        for run in runs:
+            for bar_no, kind in ((run[0], "start"), (run[-1] + 1, "stop")):
+                meas = by_no.get(bar_no)
+                if meas is None:
+                    continue
+                attrs = meas.find("attributes")
+                if attrs is None:
+                    attrs = ET.Element("attributes")
+                    meas.insert(0, attrs)
+                style = ET.SubElement(attrs, "measure-style")
+                rep = ET.SubElement(style, "measure-repeat")
+                rep.set("type", kind)
+                if kind == "start":
+                    rep.text = "1"
+    tree.write(path, encoding="UTF-8", xml_declaration=True)
 
 
 def tidy_musicxml(path: str) -> None:
@@ -1257,24 +1653,22 @@ def main() -> None:
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("-o", "--out", default="Fly_Me_To_The_Moon_BigBand.musicxml",
-                    help="output MusicXML path (transposed / performance score)")
-    ap.add_argument("--concert", default=None,
-                    help="also write a concert-pitch score to this path")
+                    help="output MusicXML path")
     args = ap.parse_args()
 
     sc = build_score()
-
-    if args.concert:
-        concert = _concert_score(sc)
-        _renumber_voices(concert)
-        concert.write("musicxml", fp=args.concert)
-        tidy_musicxml(args.concert)
-        print(f"wrote {args.concert}  (concert pitch)")
+    repeat_bars = getattr(sc.parts[-1], "repeatBarNumbers", [])
+    for prt in sc.parts:
+        if getattr(prt, "repeatBarNumbers", None):
+            repeat_bars = prt.repeatBarNumbers
 
     sc.toWrittenPitch(inPlace=True)
     _renumber_voices(sc)
     sc.write("musicxml", fp=args.out)
     tidy_musicxml(args.out)
+    build_drumset(args.out)
+    mark_measure_repeats(args.out, repeat_bars)
+    clear_repeated_measures(args.out, repeat_bars)
     print(f"wrote {args.out}  (transposed parts)")
 
 
