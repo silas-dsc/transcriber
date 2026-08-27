@@ -7,16 +7,19 @@ handed around the sections the way a Sinatra chart hands it around.
 
 ## Files
 
-`fly_me_to_the_moon_bigband.py` is the generator. Running it writes two scores:
-
-| File | What it is |
-| ---- | ---------- |
-| `Fly Me To The Moon - 10-piece Big Band.musicxml` | Performance score, **transposed parts** — open this in MuseScore and use *Parts* to extract individual books |
-| `Fly Me To The Moon - 10-piece Big Band (Concert Score).musicxml` | **Concert-pitch** score for the director |
-
-Both are plain MusicXML and open directly in MuseScore, Sibelius, Finale or
-Dorico. The scores are not committed — they are deterministic output of the
+`fly_me_to_the_moon_bigband.py` is the generator. Running it writes
+`Fly Me To The Moon - 10-piece Big Band.musicxml` — plain MusicXML, opens
+directly in MuseScore, Sibelius, Finale or Dorico. Use *Parts* to extract
+individual books. The score is not committed: it is deterministic output of the
 generator, and the repository already ignores `*.musicxml` as build output.
+
+**There is deliberately no separate concert-pitch file.** MusicXML always
+stores *written* pitch, so a "C score" made by stripping each instrument's
+transposition is a trap — the notes become sounding pitches but a reader still
+range-checks them as written pitch, and every transposing part appears far
+below its staff in red (a baritone sax notated D2–D4 on a treble staff). Concert
+pitch is a display mode: in MuseScore it is the **Concert Pitch** button, which
+re-notates and re-clefs properly.
 
 ## Instrumentation
 
@@ -24,11 +27,34 @@ generator, and the repository already ignores `*.musicxml` as build output.
 Voice    cue staff — the singer; the band never doubles it
 Reeds    Alto Sax (E-flat) · Tenor Sax (B-flat) · Baritone Sax (E-flat)
 Brass    Trumpet 1 (B-flat) · Trumpet 2 (B-flat) · Trombone
-Rhythm   Keys · Bass · Drums
+Rhythm   Keys (grand staff) · Bass · Drums
 ```
 
 Nine players plus the singer. The Voice staff is a cue: it is there so the band
 can see what they are working around, and so the fills land in the right place.
+
+### Ranges and clefs
+
+Every part is inside its instrument's practical range, so no part needs an
+octave clef. MuseScore range-checks *sounding* pitch, so both are listed:
+
+| Part | Written | Sounds | MuseScore range | |
+| ---- | ------- | ------ | --------------- | - |
+| Voice | A3–B♭4 | A3–B♭4 | — | |
+| Alto Sax | D4–D6 | F3–F5 | 49–80 | clean |
+| Tenor Sax | C4–C#6 | B♭2–B4 | 44–75 | clean |
+| Baritone Sax | B3–B5 | D2–D4 | 36–67 | clean |
+| Trumpet 1 | G#3–C6 | F#3–B♭5 | 54–82 | clean |
+| Trumpet 2 | G#3–A5 | F#3–G5 | 54–82 | clean |
+| Trombone | F2–B♭4 | F2–B♭4 | 40–72 | clean |
+| Bass | A2–C4 | A1–C3 | 28–60 | clean |
+
+The bass is the one part that needed fixing. It **sounds an octave below where
+it is written**, which the score now declares (`<transpose><octave-change>-1`),
+so the part sits in the normal bass-clef register on the page and still plays
+back at the right pitch. An 8vb clef would say the same thing, but combined
+with the transpose element some readers shift the octave twice, so the plain
+bass clef plus the declaration is the safer encoding.
 
 ## What is on the recording
 
@@ -86,6 +112,31 @@ from whoever is not carrying it:
 | 105–120 | **G** | Whole band, sustained under the voice | Whole band, in every window |
 | 121–128 | **H** | Coda — swell under the last held note into the "Basie" tag | |
 
+## Rhythm section
+
+**Keys** is a grand staff. It comps from chord symbols and slashes for most of
+the chart — the slashes are a guide, not a rhythm — but the intro and the
+ending are written out as rootless right-hand voicings over left-hand roots
+(the bass already has the root, so the right hand takes the chord tones above
+it plus the 9th), and there are written right-hand fills in five gaps where the
+horns are thin enough to leave room.
+
+**Drums** are a real part rather than 128 bars of slashes. Each section states
+its groove in full for two bars and is then marked with repeat signs, so the
+player reads a pattern:
+
+- the basic swing ride is the usual "ding, ding-da-ding" — a quarter then two
+  swung eighths, twice a bar — over hi-hat with the foot on 2 and 4;
+- from **B** the groove gets busier: the snare comps with the ride on the second
+  eighth of each half-bar and the bass drum starts punctuating;
+- every eight bars the repeats break for a written-out fill — half a bar
+  mid-section, a full bar to set up the next one — and the bar after a fill
+  takes a crash.
+
+There are 32 repeat markers across the part. The notes stay in the repeated
+measures, so it plays back correctly and still reads if an engraver ignores the
+marking.
+
 ## Three rules the code enforces
 
 Staying out of a singer's way is the whole job, so it is checked rather than
@@ -103,12 +154,7 @@ singer's octave are pushed down an octave; anything that still collides is
 dropped.
 
 Also checked: 0 semitone clashes between simultaneous parts, 0 malformed bars,
-0 dangling ties, and every written part inside its comfortable range —
-
-```
-Voice A3–B♭4 · Alto D4–D6 · Tenor C4–C#6 · Baritone B3–B5
-Trumpet 1 G#3–C6 · Trumpet 2 G#3–A5 · Trombone F2–B♭4
-```
+0 dangling ties, and every part inside the ranges listed above.
 
 Two adjustments the voicing engine makes, both ordinary big-band practice:
 major 7th chords are voiced with the 6th so the root and 7th never collide, and
@@ -118,9 +164,7 @@ chromatic approach.
 ## Regenerating
 
 ```bash
-python fly_me_to_the_moon_bigband.py \
-    -o "Fly Me To The Moon - 10-piece Big Band.musicxml" \
-    --concert "Fly Me To The Moon - 10-piece Big Band (Concert Score).musicxml"
+python fly_me_to_the_moon_bigband.py -o "Fly Me To The Moon - 10-piece Big Band.musicxml"
 ```
 
 Only `music21` is needed.
