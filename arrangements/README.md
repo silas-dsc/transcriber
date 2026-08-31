@@ -7,11 +7,16 @@ handed around the sections the way a Sinatra chart hands it around.
 
 ## Files
 
-`fly_me_to_the_moon_bigband.py` is the generator. Running it writes
+`fly_me_to_the_moon_bigband.py` is the arrangement generator. Running it writes
 `Fly Me To The Moon - 10-piece Big Band.musicxml` — plain MusicXML, opens
 directly in MuseScore, Sibelius, Finale or Dorico. Use *Parts* to extract
 individual books. The score is not committed: it is deterministic output of the
 generator, and the repository already ignores `*.musicxml` as build output.
+
+`fly_me_to_the_moon_drums.py` is a second, independent generator: the drum part
+transcribed from the recording, on its own, as
+`Fly Me To The Moon - Drums.musicxml` (and `.mxl`). See
+[The drum transcription](#the-drum-transcription).
 
 **There is deliberately no separate concert-pitch file.** MusicXML always
 stores *written* pitch, so a "C score" made by stripping each instrument's
@@ -79,7 +84,7 @@ Both are transcribed pitch-for-pitch into the generator (`COUNTER`, `LICK_A`,
 | --------- | ----- | ---------------------- |
 | Key | **B-flat major / G minor** | chroma + Krumhansl-Schmuckler; confirms the file's own `Gm` tag |
 | Tempo | **120.000 BPM exactly** | onset-grid search over the isolated drum stem — an exact round number, so the track is sequenced |
-| Downbeat | 0.600 s | 99 of 175 harmonic changes fall in one half-beat bin |
+| Downbeat | **0.800 s** | least-squares fit of the kick pulse, then the bar phase from the bass line (see below) |
 | Form | 8-bar intro · 7 × 16-bar chorus · 8-bar coda = **128 bars** | 16-bar cycle template-matched at every offset |
 
 The changes, recovered by averaging chroma across all seven choruses with roots
@@ -94,6 +99,13 @@ from the isolated bass:
 
 They match the recording bar by bar at **z = 13.3** against a shuffled-alignment
 baseline (0.692 vs 0.550 ± 0.011).
+
+The downbeat in that table was originally read off harmonic-change bins as
+0.600 s. Fitting the kick pulse for the drum transcription put it at 0.800 s
+instead — the earlier figure was 0.4 of a beat early, because a chord change
+smears across a window rather than landing on a frame. The chord sequence is
+unaffected: bar-length chroma windows overlap 80% either way, and the roots
+come out the same.
 
 ## Road map
 
@@ -167,10 +179,51 @@ major 7th chords are voiced with the 6th so the root and 7th never collide, and
 an 11th in the lead suspends the chord rather than being mistaken for a
 chromatic approach.
 
+## The drum transcription
+
+`fly_me_to_the_moon_drums.py` is a separate thing from the arrangement: it is
+what the drummer on the recording actually plays, written out bar by bar, as a
+one-staff drum part. Nothing about it is invented.
+
+How it was recovered:
+
+| Step | Result |
+| ---- | ------ |
+| Demucs (`htdemucs`) isolates the kit | a clean drum stem, 258.09 s |
+| Least-squares fit of the kick pulse | 120.002 BPM, beat 1 of bar 1 at **0.800 s**, residual σ = 14 ms over 497 hits |
+| Bar phase from the bass line | of the four candidate phases, only one makes the roots move in the descending fourths the tune is built from (E♭–A–D–G–C–F–B♭): **63%** against a 22% baseline for the other three |
+| Onset strength per slot in six bands | 20–110 Hz, 110–260, 260–900, 2.5–7k, 7–12.5k, 12.5–20k, on a triplet-eighth grid (12 slots per bar × 128 bars) |
+| Band balance names the piece struck | 499 bass drum, 236 hi-hat, 108 snare (34 accented), 7 crash |
+
+The hi-hat is unmistakable: on beats 2 and 4 the strike is about four times
+brighter in 12.5–20 kHz relative to 7–12.5 kHz than anything else on the
+record, and decays far faster. It is there in 124 of the 128 bars.
+
+**There is no ride pattern anywhere on the recording.** The 7–12.5 kHz band
+carries only 13 events that are not the hi-hat; a swing ride at this tempo
+would have left roughly 770. What the drummer plays is bass drum feathering
+four to the bar, hi-hat on 2 and 4, and a snare that comps and fills — so
+that is what the part says.
+
+What the part does *not* claim:
+
+* **No toms.** Every fill hit has snare snap in it; nothing in the low bands
+  survives once the bass-drum bleed is accounted for. The fills are written as
+  snare and bass drum, which is what the measurement supports.
+* **Two dynamic levels only** — plain and accented. The accent threshold is a
+  cut in snare-band onset strength, not a graded velocity.
+* Ghost notes below the detection floor are not there.
+
+Bars whose notation is an exact repeat of the bar before carry a `%` and are
+otherwise empty, as before. There are 29 of them.
+
 ## Regenerating
 
 ```bash
 python fly_me_to_the_moon_bigband.py -o "Fly Me To The Moon - 10-piece Big Band.musicxml"
+python fly_me_to_the_moon_drums.py \
+    -o "Fly Me To The Moon - Drums.musicxml" \
+    --mxl "Fly Me To The Moon - Drums.mxl"
 ```
 
 Only `music21` is needed.
