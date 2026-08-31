@@ -13,10 +13,12 @@ directly in MuseScore, Sibelius, Finale or Dorico. Use *Parts* to extract
 individual books. The score is not committed: it is deterministic output of the
 generator, and the repository already ignores `*.musicxml` as build output.
 
-`fly_me_to_the_moon_drums.py` is a second, independent generator: the drum part
-transcribed from the recording, on its own, as
-`Fly Me To The Moon - Drums.musicxml` (and `.mxl`). See
-[The drum transcription](#the-drum-transcription).
+`fly_me_to_the_moon_drums.py` and `fly_me_to_the_moon_piano.py` are two more,
+independent generators: the drum part and the piano part transcribed from the
+recording, each on its own, as `Fly Me To The Moon - Drums.musicxml` and
+`Fly Me To The Moon - Piano.musicxml` (both also `.mxl`). See
+[The drum transcription](#the-drum-transcription) and
+[The piano transcription](#the-piano-transcription).
 
 **There is deliberately no separate concert-pitch file.** MusicXML always
 stores *written* pitch, so a "C score" made by stripping each instrument's
@@ -217,6 +219,44 @@ What the part does *not* claim:
 Bars whose notation is an exact repeat of the bar before carry a `%` and are
 otherwise empty, as before. There are 29 of them.
 
+## The piano transcription
+
+`fly_me_to_the_moon_piano.py` is the same idea as the drum part, for the
+pianist: what is actually played, on a grand staff, D2–A♯5.
+
+| Step | Result |
+| ---- | ------ |
+| Demucs' six-source model (`htdemucs_6s`) isolates the piano | real content, not bleed — RMS 0.023 and audibly active 72% of the track, where the guitar stem beside it is 0.0006 |
+| Basic Pitch (Spotify's ICASSP-2022 polyphonic model) reads the stem | 1851 notes, A♯1–A♯5 |
+| Note starts within 75 ms of each other are one strike | 637 strikes |
+| Quantise each strike to the same triplet-eighth grid | the median strike lands **0.155 of a triplet-eighth** from a subdivision (28 ms); against a straight-sixteenth grid the median is 0.355 of a sixteenth, so the piano swings with the rest of the track |
+| Check each strike back against the piano stem's own onset envelope | **336 strikes, 1450 notes** survive |
+
+That last filter is the one worth trusting. It knows nothing about where beats
+are — it only asks whether there is an attack in the audio under each strike —
+and it removes every strike sitting on a middle triplet while keeping the
+upbeats:
+
+```
+slot in bar   1   .   a   2   .   a   3   .   a   4   .   a
+strikes      31   0  14  14   0  68  10   0  79  25   0  95
+```
+
+Which is the shape of the part: chords on beat 1 and on the upbeats of 2, 3
+and 4, two or three a bar, left hand one to three notes, right hand two to
+four, and 27% of the note-heads tied over a barline as pushes.
+
+**Checked against the audio.** Turning the finished transcription back into a
+chroma vector per bar and comparing it with the piano stem's own chroma gives
+a mean agreement of **0.760**, against **0.566 ± 0.010** for the same bars
+shuffled — z = 18.6 over 126 bars.
+
+What the part does *not* claim: Basic Pitch is a general polyphonic model, not
+a piano-specific one, so an inner voice here and there will be wrong even
+where the chord is right — the 0.760 figure is the honest measure of how close
+it is. Dynamics are not transcribed. The chord symbols are in the big band
+chart, not here; this file is only the notes.
+
 ## Regenerating
 
 ```bash
@@ -224,6 +264,11 @@ python fly_me_to_the_moon_bigband.py -o "Fly Me To The Moon - 10-piece Big Band.
 python fly_me_to_the_moon_drums.py \
     -o "Fly Me To The Moon - Drums.musicxml" \
     --mxl "Fly Me To The Moon - Drums.mxl"
+python fly_me_to_the_moon_piano.py \
+    -o "Fly Me To The Moon - Piano.musicxml" \
+    --mxl "Fly Me To The Moon - Piano.mxl"
 ```
 
-Only `music21` is needed.
+Only `music21` is needed to regenerate any of the three; the analysis behind
+the two transcriptions used Demucs, librosa and Basic Pitch, and its results
+are baked into the scripts.
