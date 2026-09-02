@@ -359,8 +359,52 @@ avoids it. The finished score has **no semitone clash anywhere below middle
 C**; the thirteen that remain are between moving upper voices, where a
 second is ordinary. Every part is inside its range at sounding pitch.
 
-325 notes in all — fewer than the 499 of the block version, because a pad is
-one long note where the block voicing had a dozen short ones.
+325 transcribed notes in all — fewer than the 499 of the block version,
+because a pad is one long note where the block voicing had a dozen short ones.
+
+### The riffs
+
+Everything above is what the recording plays. This is not. The saxophone is
+silent through choruses **C, E, F and G**, and a horn section that disappears
+for half a chart is not a chart. What fills the holes is the oldest device
+there is — the band answering the singer at the ends of her phrases — written
+the way a Sinatra chart writes it: short unison figures in octaves, syncopated
+off the beat, never under a syllable.
+
+**The gaps come from the melody, not from taste.** Across the 16-bar cycle the
+singer articulates on nearly every beat except in four places, where she is
+holding:
+
+| Cycle bars | Hole | Riff |
+| ---------- | ---- | ---- |
+| 4 | beats 2–4, end of phrase 1 | *answer* — up the B♭ 6th chord, landing on the 6th |
+| 8 | beats 1–3, clear of her "in" pickup | *climb* — the same shape a step longer, through Gm7 |
+| 11–12 | all but the last beat of 12 | *cell* — one syncopated figure said twice, the ♭9 on the G7 |
+| 15–16 | from the middle of 15 — the turnaround, the biggest hole | *turnaround* — ♯9, ♭9, root, ♭7, ♭13 down the D7 |
+
+The same four figures come back every chorus, which is what makes them riffs
+rather than fills. **Every one of their 26 notes is a chord tone or a standard
+tension** — checked against the changes, note by note; none is an accident.
+The first riff hands the singer her next note: it ends on the G she enters
+phrase 3 on.
+
+The section builds across the four empty choruses, the way those charts build:
+
+| | Chorus | Who | Octaves |
+| --- | ------ | --- | ------- |
+| **C** | 41–56 | reeds | alto and tenor in unison, baritone 8vb |
+| **E** | 73–88 | brass | trumpets in unison, trombone 8vb |
+| **F** | 89–104 | trading | reeds take the first two riffs, brass the last two |
+| **G** | 105–120 | tutti | all six, three octaves of unison |
+
+Dynamics follow it — *mp*, *mf*, *mf*, *f* — and the brass fall off the end of
+every figure long enough to carry one. One riff is dropped: the turnaround of
+chorus C would run into bars 55–56, where the saxophone is already playing the
+pickup to the solo chorus. Where the recording speaks, it wins.
+
+That is 366 written notes against 325 transcribed ones, and no riff note lands
+on a syllable — checked against the melody, counting a note tied over a barline
+as held rather than sung.
 
 Each part is written at its own transposition, with the key signature to
 match: alto and baritone in G, tenor and trumpets in C, trombone in B♭.

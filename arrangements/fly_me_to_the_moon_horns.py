@@ -19,8 +19,8 @@ invented:
 
 **The saxophone does not play for most of the second half.**  Measured against
 the solo, bars 42-54 and 74-120 are 67 and 70 dB down - digital silence, not
-quiet playing.  So the horns rest there.  They sound in bars 1-9, 11-41,
-55-73 and 123-126, and nowhere else.
+quiet playing.  The transcription therefore covers bars 1-9, 11-41, 55-73 and
+123-126 and nothing else, and the rest is filled by written riffs - see below.
 
 How it is handed around:
 
@@ -29,6 +29,8 @@ How it is handed around:
   where there is no    one to three of the upper horns carry the line while
   vocal                the lower ones hold a pad underneath: sustained chord
                        tones that change with the harmony, not with the tune
+  where the saxophone  written riffs in the gaps at the ends of the singer's
+  is silent            phrases - unison in octaves, reeds then brass then both
 
 Block-voicing every note - all six horns moving together on every eighth -
 is what made the first version muddy, and it is measurable.  Counting pairs
@@ -55,8 +57,9 @@ from __future__ import annotations
 
 import copy
 
-from music21 import (bar, clef, expressions, harmony, instrument, key, layout,
-                     metadata, meter, note, stream, tempo)
+from music21 import (articulations, bar, clef, dynamics, expressions,
+                     harmony, instrument, key, layout, metadata, meter,
+                     note, stream, tempo)
 
 from fly_me_to_the_moon_piano import (SECTIONS, TOTAL_BARS, fill, pack_mxl,
                                       written_offset)
@@ -146,6 +149,116 @@ PARTS: dict[str, tuple[tuple[int, int, int], ...]] = {
     ),
 }
 
+# --------------------------------------------------------------------------
+# Riffs - written, not transcribed
+# --------------------------------------------------------------------------
+#
+# Everything above is what the recording plays.  This is not: the saxophone
+# sits out choruses C, E, F and G entirely, and a horn section that vanishes
+# for half the chart is not a chart.  What goes in the holes is the oldest
+# device in the book - the band answering the singer in the gaps at the ends
+# of her phrases - written the way a Sinatra chart writes it: short unison
+# figures in octaves, syncopated off the beat, never under a syllable.
+#
+# The gaps come from the melody itself.  Across the 16-bar cycle the singer
+# articulates on almost every beat except in four places, where she holds:
+#
+#   bar 4        beats 2-4        end of phrase 1
+#   bar 8        beats 1-3        end of phrase 2, clear of her "in" pickup
+#   bars 11-12   all but the last beat of 12
+#   bars 15-16   from the middle of 15 - the turnaround, the biggest hole
+#
+# Those are the four riffs, and they are the same four every chorus, which is
+# what makes them riffs rather than fills.  All four climb or fall through the
+# chord of the moment and land on a colour tone rather than the root: the 6th
+# over B-flat, the flat 9 over G7, the sharp 9 to flat 9 to root descent over
+# the D7 turnaround.  The first hands the singer her next note - the riff ends
+# on the G she enters on.
+#
+# (cycle bar 1-16, slot in that bar, length in slots, concert MIDI)
+RIFFS: dict[str, tuple[tuple[int, int, int, int], ...]] = {
+    # bar 4 over B-flat: up the 6th chord, ending on the 6th
+    "answer": ((4, 5, 1, 58), (4, 6, 2, 62), (4, 8, 1, 65), (4, 9, 3, 67)),
+    # bar 8 over Gm7: the same climb, a step longer, out before her pickup
+    "climb": ((8, 2, 1, 55), (8, 3, 2, 58), (8, 5, 1, 60), (8, 6, 2, 62),
+              (8, 8, 1, 65)),
+    # bars 11-12: one syncopated cell, said twice, the flat 9 on the G7
+    "cell": ((11, 2, 1, 62), (11, 3, 2, 65), (11, 8, 1, 67), (11, 9, 3, 65),
+             (12, 2, 1, 62), (12, 3, 2, 65), (12, 5, 1, 68), (12, 6, 2, 67),
+             (12, 8, 1, 65)),
+    # bars 15-16, the turnaround: sharp 9, flat 9, root, flat 7, flat 13
+    "turnaround": ((15, 8, 1, 62), (15, 9, 2, 65), (15, 11, 1, 67),
+                   (16, 0, 2, 65), (16, 2, 1, 63), (16, 3, 2, 62),
+                   (16, 5, 1, 60), (16, 6, 3, 58)),
+}
+RIFF_ORDER = ("answer", "climb", "cell", "turnaround")
+
+# Who plays a riff, and at what octave.  Unison in octaves is the sound:
+# saxes with the baritone underneath, trumpets with the trombone underneath.
+SCORING = {
+    "reeds": {"alto": 0, "tenor": 0, "bari": -12},
+    "brass": {"tpt1": 12, "tpt2": 12, "tbn": 0},
+    "tutti": {"alto": 0, "tenor": 0, "bari": -12,
+              "tpt1": 12, "tpt2": 12, "tbn": 0},
+}
+
+# The four choruses the saxophone leaves empty, and how the section builds
+# across them: reeds alone, then brass alone, then the two trading, then
+# everybody in three octaves.
+RIFF_CHORUSES: dict[int, tuple[tuple[str, ...], str]] = {
+    41:  (("reeds", "reeds", "reeds", "reeds"), "mp"),
+    73:  (("brass", "brass", "brass", "brass"), "mf"),
+    89:  (("reeds", "reeds", "brass", "brass"), "mf"),
+    105: (("tutti", "tutti", "tutti", "tutti"), "f"),
+}
+
+# A fall off the end of a brass figure, where the last note is long enough to
+# carry one.  Saxes play theirs straight.
+FALLING = {"answer", "cell", "turnaround"}
+BRASS = {"tpt1", "tpt2", "tbn"}
+
+
+def place_riffs() -> tuple[dict[str, list[tuple[int, int, int]]],
+                          dict[str, set[int]],
+                          dict[str, dict[int, str]]]:
+    """Merge the riffs into the transcribed parts.
+
+    A riff is dropped whole if any bar it wants is already carrying
+    transcribed material - the recording wins.  That happens once: the
+    turnaround of chorus C runs into the pickup bars of the solo chorus."""
+    events = {k: [(s, n, m) for s, n, m in v] for k, v in PARTS.items()}
+    falls: dict[str, set[int]] = {k: set() for k in PARTS}
+    dyns: dict[str, dict[int, str]] = {k: {} for k in PARTS}
+
+    taken = {k: {b for s, n, _ in v for b in range(s, s + n)}
+             for k, v in PARTS.items()}
+    for start, (plan, dyn) in sorted(RIFF_CHORUSES.items()):
+        first: dict[str, int] = {}
+        for name, scoring in zip(RIFF_ORDER, plan):
+            figure = RIFFS[name]
+            slots = [12 * (start - 1 + cyc - 1) + at for cyc, at, _, _ in figure]
+            parts = SCORING[scoring]
+            bars = {s // 12 for s in slots}
+            if any(t // 12 in bars for k in parts for t in taken[k]):
+                continue                      # the recording is already there
+            last = max(range(len(figure)), key=lambda i: slots[i])
+            for key_, oct_ in parts.items():
+                for i, (_, _, length, midi) in enumerate(figure):
+                    events[key_].append((slots[i], length, midi + oct_))
+                    taken[key_].update(range(slots[i], slots[i] + length))
+                first.setdefault(key_, slots[0])
+                first[key_] = min(first[key_], slots[0])
+                if name in FALLING and key_ in BRASS:
+                    falls[key_].add(slots[last])
+        for key_, slot in first.items():
+            dyns[key_][slot] = dyn
+    for v in events.values():
+        v.sort()
+    return events, falls, dyns
+
+
+RIFF_EVENTS, RIFF_FALLS, RIFF_DYNAMICS = place_riffs()
+
 # score order, with the transposition each instrument is written at
 LAYOUT = [
     ("alto",  "Alto Sax",     instrument.AltoSaxophone,     9, "treble"),
@@ -166,7 +279,7 @@ LAST_CHARTED_BAR = 120
 def hand_events(key_: str) -> list[tuple[float, float, list[int]]]:
     """(start, end, pitches) in written quarter notes from the top of bar 1."""
     out = []
-    for slot, length, midi in PARTS[key_]:
+    for slot, length, midi in RIFF_EVENTS[key_]:
         b, s = divmod(slot, 12)
         start = 4 * b + written_offset(s)
         end = 4 * b + written_offset(s + length)
@@ -213,7 +326,29 @@ def build_part(key_: str, name: str, cls, _semis: int, clef_name: str) -> stream
         if pos < bar_end:
             fill(m, pos - bar_start, bar_end - pos, None, False, False)
         p.append(m)
+    mark_riffs(p, key_)
     return p
+
+
+def mark_riffs(p: stream.Part, key_: str) -> None:
+    """A dynamic where each section first picks up a riff, and a fall off the
+    end of the brass figures."""
+    def at(slot: int):
+        m = p.measure(slot // 12 + 1)
+        if m is None:
+            return None
+        off = written_offset(slot % 12)
+        hits = [e for e in m.notes if abs(e.offset - off) < 1e-6]
+        return hits[0] if hits else None
+
+    for slot, mark in RIFF_DYNAMICS[key_].items():
+        m = p.measure(slot // 12 + 1)
+        if m is not None:
+            m.insert(written_offset(slot % 12), dynamics.Dynamic(mark))
+    for slot in RIFF_FALLS[key_]:
+        el = at(slot)
+        if el is not None:
+            el.articulations.append(articulations.Falloff())
 
 
 def build_chord_staff() -> stream.Part:
@@ -244,7 +379,7 @@ def build_score() -> stream.Score:
     sc = stream.Score()
     sc.metadata = metadata.Metadata(
         title="Fly Me To The Moon",
-        subtitle="horns - the recording's saxophone, passed around the section",
+        subtitle="horns - the recording's saxophone, passed around the section, with riffs in the gaps",
         composer="Bart Howard",
     )
     parts = [build_part(*spec) for spec in LAYOUT]
@@ -343,7 +478,9 @@ def main() -> None:
     sc.write("musicxml", fp=args.out)
     tidy_musicxml(args.out)
     n = sum(len(v) for v in PARTS.values())
-    print(f"wrote {args.out}  (6 horn parts + chords, {n} notes)")
+    r = sum(len(v) for v in RIFF_EVENTS.values()) - n
+    print(f"wrote {args.out}  (6 horn parts + chords, "
+          f"{n} transcribed notes + {r} riff notes)")
     if args.mxl:
         pack_mxl(args.out, args.mxl)
         print(f"wrote {args.mxl}")
