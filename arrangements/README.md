@@ -20,6 +20,10 @@ recording, each on its own, as `Fly Me To The Moon - Drums.musicxml` and
 [The drum transcription](#the-drum-transcription) and
 [The piano transcription](#the-piano-transcription).
 
+`fly_me_to_the_moon_piano_comp.py` rewrites that piano transcription as a
+playable rootless comping part — `Fly Me To The Moon - Piano Comp.musicxml`.
+See [The piano comping part](#the-piano-comping-part).
+
 **There is deliberately no separate concert-pitch file.** MusicXML always
 stores *written* pitch, so a "C score" made by stripping each instrument's
 transposition is a trap — the notes become sounding pitches but a reader still
@@ -257,6 +261,60 @@ where the chord is right — the 0.760 figure is the honest measure of how close
 it is. Dynamics are not transcribed. The chord symbols are in the big band
 chart, not here; this file is only the notes.
 
+## The piano comping part
+
+The transcription above is an accurate record and an awkward read: up to nine
+notes in a strike, spread over three and a half octaves.
+`fly_me_to_the_moon_piano_comp.py` keeps its **rhythm** — every strike, in
+place, with its measured length — and rewrites the **pitches** as rootless
+voicings:
+
+```
+left hand    the two guide tones, 3rd and 7th
+right hand   the colour above them - 9th, 5th, 11th / 13th / 6th
+```
+
+which is how a pianist comps behind a bass player. The recording's own density
+picks the thickness: a strike that was 1–2 notes becomes a 3-note voicing,
+3–4 becomes 4, 5 or more becomes 5. That gives 47 three-note, 130 four-note
+and 159 five-note voicings.
+
+| Constraint | Result |
+| ---------- | ------ |
+| left hand within one octave | max **7** semitones, mean 6.3 |
+| right hand within one octave | max **11** semitones, mean 6.1 |
+| 3 to 6 notes per voicing | 3–5, never fewer or more |
+| no pitch class doubled | **0** doublings |
+| no root in the left hand | **0** — there is no root anywhere; the bass has it |
+| no minor 2nd between neighbours, in either hand or across them | **0** |
+| hands never cross | **0** crossings |
+| smooth voice leading | **0.74** semitones of movement per note between strikes |
+
+Range A♯2–F5, so it sits under the hands.
+
+Placement is a search, not a formula: of every legal way to voice each hand,
+the one that moves least from the previous strike wins, with a light pull
+toward the middle of the register.
+
+**Which chord each strike belongs to was measured, not assumed.** Scoring the
+transcribed pitches of every strike against its own bar's chord and the next
+one splits cleanly by position — strikes on the "and of 4" take the *next*
+bar's chord **69 times against 26**, while every other position takes its own
+(the "and of 3", for instance, 73 against 6). So the pushes are voiced as the
+anticipations they are, and the chart's harmony is stated where the pianist
+actually stated it.
+
+The harmony itself is the verified chart, read as one continuous 16-bar cycle:
+the 8-bar intro is the cycle's last eight bars, so bar 9 lands on the top of
+the form. Chord symbols are printed above the staff.
+
+One thing this part deliberately does **not** do is inherit the
+transcription's inner voices. Basic Pitch's middle notes are the least
+reliable thing in it — naming a chord per bar from them agrees with the
+verified chart only 31 times in 112 — so the rewrite takes the rhythm from the
+transcription and the harmony from the chart, which is the reliable half of
+each.
+
 ## Regenerating
 
 ```bash
@@ -267,8 +325,11 @@ python fly_me_to_the_moon_drums.py \
 python fly_me_to_the_moon_piano.py \
     -o "Fly Me To The Moon - Piano.musicxml" \
     --mxl "Fly Me To The Moon - Piano.mxl"
+python fly_me_to_the_moon_piano_comp.py \
+    -o "Fly Me To The Moon - Piano Comp.musicxml" \
+    --mxl "Fly Me To The Moon - Piano Comp.mxl"
 ```
 
-Only `music21` is needed to regenerate any of the three; the analysis behind
+Only `music21` is needed to regenerate any of the four; the analysis behind
 the two transcriptions used Demucs, librosa and Basic Pitch, and its results
 are baked into the scripts.
