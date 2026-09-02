@@ -24,6 +24,10 @@ recording, each on its own, as `Fly Me To The Moon - Drums.musicxml` and
 playable — `Fly Me To The Moon - Piano Comp.musicxml`. See
 [The playable piano part](#the-playable-piano-part).
 
+`fly_me_to_the_moon_sax.py` is the solo saxophone on the recording, on its own
+staff, transcribed — `Fly Me To The Moon - Sax.musicxml`. See
+[The saxophone transcription](#the-saxophone-transcription).
+
 `fly_me_to_the_moon_horns.py` is a horns-only chart — three saxes, two
 trumpets and a trombone — built from the recording's solo saxophone:
 `Fly Me To The Moon - Horns.musicxml`. See
@@ -266,6 +270,82 @@ where the chord is right — the 0.760 figure is the honest measure of how close
 it is. Dynamics are not transcribed. The chord symbols are in the big band
 chart, not here; this file is only the notes.
 
+## The saxophone transcription
+
+`fly_me_to_the_moon_sax.py` is the line everything else was built from: the
+solo saxophone, one staff, what it actually plays and nothing more. The big
+band chart develops this material and the horn chart hands it around a
+section — this is the record they were taken from.
+
+**It is a tenor.** The line runs concert B♭2 to B♭4, and five of its notes sit
+below D♭3, which is the bottom of an alto. Written for a B♭ tenor — up a major
+ninth — that same span is C4 to C6, dead centre of the instrument.
+
+| Step | Result |
+| ---- | ------ |
+| Demucs' six-source model separates piano and guitar out | the saxophone is left alone in `other`, and pYIN reads it as a single line |
+| A note may only **start** where the stem is loud and pYIN is confident | level above 0.14 of its own 99.5th percentile, voicing probability above 0.55 |
+| A note **continues** on a much looser gate | level 0.04, probability 0.25 — stable across thresholds: 188, 188, 189 notes |
+| Split any held note where the stem shows a fresh attack | fired **zero** times |
+| Quantise to the triplet-eighth grid | **188 notes**, median onset 30 ms from its slot |
+
+**Two gates, not one.** A saxophone note decays a long way below the level it
+started at, so one strict threshold at both ends cuts every note short: an
+earlier pass had 68% of its notes one slot long, which is a line that chatters
+rather than one that holds. With a strict gate for starts and a loose one for
+ends, the median note is 209 ms and the longest is 1.37 s.
+
+That the splitting pass never fired is worth stating plainly: the repeated
+notes in this part are genuinely repeated notes, not one note misread as
+several.
+
+### The saxophone plays behind the beat
+
+This came out of trying to settle which downbeat to quantise against, and it is
+the most interesting thing the analysis turned up. Against the downbeat the
+drums and piano establish at 0.800 s:
+
+| | median onset, relative to the grid |
+| --- | --- |
+| piano strikes (671) | **−2 ms** — dead on |
+| saxophone onsets (188) | **+24 ms** — behind |
+
+The difference is +26 ms with a 95% confidence interval of +16 to +33 ms
+(bootstrapped), so it excludes zero. It is a real lay-back, not scatter.
+
+Which means the grid to quantise the saxophone against is the ensemble's,
+shifted by the saxophone's own median lag — 0.8417 s. Notation should say what
+the player *meant*; the lay-back is a way of playing it, and it is marked as a
+direction at the top of the score rather than written into the rhythms.
+Quantised on the ensemble's downbeat instead, the median onset misses its slot
+by 41 ms; on the saxophone's own, by 30 ms. It matters: 21 notes land in a
+different slot depending on which you pick.
+
+Once that is settled the onsets fall where a swung line falls — **82 on the
+beats, 84 on the swung "and"s, 22 in the middle of a triplet.**
+
+### Checked against the audio
+
+| | |
+| --- | --- |
+| pitch agreement where score and stem both sound | **98.4%** |
+| frames scored where the stem is not sounding even faintly | 9.4% |
+| notes inside the chord of the moment | **140 of 155** |
+| the 15 that are not | every one a chromatic approach |
+
+The 9.4% is release tails, which is what the looser gate is for. The 15 outside
+the chord all step to or from a chord tone — that is what an approach note is,
+and none is stranded.
+
+**The saxophone is silent for most of the second half.** Measured against the
+solo chorus, bars 42–54 and 74–122 are 67 and 70 dB down — digital silence, not
+quiet playing. It sounds in bars 1–9, 11–12, 14–27, 30–41, 55–73 and 123–126,
+and the rests in this part are real rests.
+
+Chord symbols sit on a concert staff of their own, for the reason given under
+[the horn chart](#the-horn-chart), and stop at bar 120 because the 16-bar cycle
+does not run through the tag.
+
 ## The playable piano part
 
 The transcription above is an accurate record and an awkward read: the same
@@ -432,6 +512,9 @@ python fly_me_to_the_moon_piano.py \
 python fly_me_to_the_moon_piano_comp.py \
     -o "Fly Me To The Moon - Piano Comp.musicxml" \
     --mxl "Fly Me To The Moon - Piano Comp.mxl"
+python fly_me_to_the_moon_sax.py \
+    -o "Fly Me To The Moon - Sax.musicxml" \
+    --mxl "Fly Me To The Moon - Sax.mxl"
 python fly_me_to_the_moon_horns.py \
     -o "Fly Me To The Moon - Horns.musicxml" \
     --mxl "Fly Me To The Moon - Horns.mxl"
