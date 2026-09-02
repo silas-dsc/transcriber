@@ -24,6 +24,11 @@ recording, each on its own, as `Fly Me To The Moon - Drums.musicxml` and
 playable — `Fly Me To The Moon - Piano Comp.musicxml`. See
 [The playable piano part](#the-playable-piano-part).
 
+`fly_me_to_the_moon_horns.py` is a horns-only chart — three saxes, two
+trumpets and a trombone — built from the recording's solo saxophone:
+`Fly Me To The Moon - Horns.musicxml`. See
+[The horn chart](#the-horn-chart).
+
 **There is deliberately no separate concert-pitch file.** MusicXML always
 stores *written* pitch, so a "C score" made by stripping each instrument's
 transposition is a trap — the notes become sounding pitches but a reader still
@@ -303,6 +308,55 @@ the choruses, but the tag does not follow it — the cycle predicts Gm7 over the
 last bars and what is actually played is a B-flat. Rather than print a chord
 the recording contradicts, the tag is marked *ending — as played*.
 
+## The horn chart
+
+`fly_me_to_the_moon_horns.py` is six staves and nothing else: no rhythm
+section, no vocal staff. What the horns play is what the **solo saxophone on
+the recording** plays, transcribed note for note and then handed around the
+section.
+
+| Step | Result |
+| ---- | ------ |
+| Demucs' six-source model leaves the saxophone alone in `other` | piano and guitar are separated out |
+| pYIN reads it as a single line | 94% of frames hold pitch inside a quarter-tone — it is monophonic, range E2–A4 |
+| Keep only frames where the stem is genuinely sounding | **169 notes**; pYIN otherwise tracks noise and invents a line in silent bars |
+| Quantise to the grid the drums and piano established | median onset **0.171 of a triplet-eighth (28 ms)** from a subdivision, and the onsets pile onto the beats and the swung "and"s exactly as the piano's do |
+
+**The saxophone stops after the solo.** Measured against it, bars 42–54 and
+74–120 are **67 and 70 dB down** — digital silence, not quiet playing. So the
+horns rest there. They sound in bars 1–9, 11–41, 55–73 and 123–126, and
+nowhere else. That leaves the last four choruses empty, which is what the
+recording does; filling them would mean inventing material rather than
+following the saxophone.
+
+How it is handed around:
+
+| Where | Treatment |
+| ----- | --------- |
+| under the vocal | one horn at a time, rotating — tenor, alto, trombone, trumpet 2 and back — playing the line as it was played |
+| where there is no vocal | the line becomes the lead of a block voicing, filled out from what the piano is holding at that moment |
+
+The no-vocal sections are the 8-bar intro, the solo chorus and the tag, and
+the colour changes every bar or two across them: full ensemble, reeds alone,
+brass alone. Long runs are broken at bar lines so no one colour holds a whole
+chorus.
+
+Voicings are close position below the lead, with two rules that keep them
+clean: neighbouring voices are never a semitone apart — in a block voicing
+that is a crunch, not a colour — and where squeezing a voice into its
+instrument's range would push it against a neighbour, it moves an octave or
+drops out. Both were added after measuring: the first pass had 25 semitone
+clashes, the finished score has **0**.
+
+499 notes in all — alto 97, tenor 81, baritone 76, trumpet 1 75, trumpet 2 87,
+trombone 83 — every part inside its range at sounding pitch.
+
+Each part is written at its own transposition, with the key signature to
+match: alto and baritone in G, tenor and trumpets in C, trombone in B♭. The
+**chord symbols are concert pitch** and are added after the parts are
+transposed, so they are not transposed with them — an E♭ alto's staff would
+otherwise label a concert Cm7 as Am7.
+
 ## Regenerating
 
 ```bash
@@ -316,8 +370,11 @@ python fly_me_to_the_moon_piano.py \
 python fly_me_to_the_moon_piano_comp.py \
     -o "Fly Me To The Moon - Piano Comp.musicxml" \
     --mxl "Fly Me To The Moon - Piano Comp.mxl"
+python fly_me_to_the_moon_horns.py \
+    -o "Fly Me To The Moon - Horns.musicxml" \
+    --mxl "Fly Me To The Moon - Horns.mxl"
 ```
 
-Only `music21` is needed to regenerate any of the four; the analysis behind
-the two transcriptions used Demucs, librosa and Basic Pitch, and its results
+Only `music21` is needed to regenerate any of the five; the analysis behind
+the transcriptions used Demucs, librosa, pYIN and Basic Pitch, and its results
 are baked into the scripts.
