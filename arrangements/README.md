@@ -334,22 +334,33 @@ How it is handed around:
 | Where | Treatment |
 | ----- | --------- |
 | under the vocal | one horn at a time, rotating — tenor, alto, trombone, trumpet 2 and back — playing the line as it was played |
-| where there is no vocal | the line becomes the lead of a block voicing, filled out from what the piano is holding at that moment |
+| where there is no vocal | one to three of the upper horns carry the line while the lower ones **hold a pad** underneath: sustained chord tones that change with the harmony, not with the tune |
 
 The no-vocal sections are the 8-bar intro, the solo chorus and the tag, and
-the colour changes every bar or two across them: full ensemble, reeds alone,
-brass alone. Long runs are broken at bar lines so no one colour holds a whole
-chorus.
+which horns move and which hold rotates phrase by phrase.
 
-Voicings are close position below the lead, with two rules that keep them
-clean: neighbouring voices are never a semitone apart — in a block voicing
-that is a crunch, not a colour — and where squeezing a voice into its
-instrument's range would push it against a neighbour, it moves an octave or
-drops out. Both were added after measuring: the first pass had 25 semitone
-clashes, the finished score has **0**.
+**Why pads rather than block voicing.** The first version block-voiced
+everything — all six horns moving together on every eighth — and it was
+muddy. That is measurable. Counting pairs of neighbouring voices against the
+usual low-interval limits (octaves below G2, fifths below C3, fourths below
+F3, thirds below middle C):
 
-499 notes in all — alto 97, tenor 81, baritone 76, trumpet 1 75, trumpet 2 87,
-trombone 83 — every part inside its range at sounding pitch.
+| | pairs closer than the limit | trombone note length | baritone note length |
+| --- | --- | --- | --- |
+| block voicing | **28%** | 1 slot | 1 slot |
+| line over pads | **13%** | 10 slots | 11 slots |
+
+The low horns stopped moving on every note, which is the whole point — mud
+comes from close intervals down low changing fast.
+
+Pads also keep clear of the line: a held note a semitone from what the line
+is playing is a grind rather than a passing rub, so below middle C the pad
+avoids it. The finished score has **no semitone clash anywhere below middle
+C**; the thirteen that remain are between moving upper voices, where a
+second is ordinary. Every part is inside its range at sounding pitch.
+
+325 notes in all — fewer than the 499 of the block version, because a pad is
+one long note where the block voicing had a dozen short ones.
 
 Each part is written at its own transposition, with the key signature to
 match: alto and baritone in G, tenor and trumpets in C, trombone in B♭. The
