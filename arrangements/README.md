@@ -363,10 +363,17 @@ second is ordinary. Every part is inside its range at sounding pitch.
 one long note where the block voicing had a dozen short ones.
 
 Each part is written at its own transposition, with the key signature to
-match: alto and baritone in G, tenor and trumpets in C, trombone in B♭. The
-**chord symbols are concert pitch** and are added after the parts are
-transposed, so they are not transposed with them — an E♭ alto's staff would
-otherwise label a concert Cm7 as Am7.
+match: alto and baritone in G, tenor and trumpets in C, trombone in B♭.
+
+**The chord symbols live on a Chords staff of their own, at concert pitch.**
+They started out on the alto's staff, added after the parts were transposed
+so they at least *read* as concert — an E♭ alto's staff would otherwise label
+a concert Cm7 as Am7. That fixes the page and not the playback: a reader
+applies a staff's transposition to its chord symbols as well as its notes, so
+MuseScore sounded those symbols a minor third away from what they said. A
+staff with no transposition of its own has nothing to apply, so on the Chords
+staff what is written is what sounds. It is a one-line staff with its rests
+hidden — nothing on it but the symbols.
 
 ## Regenerating
 

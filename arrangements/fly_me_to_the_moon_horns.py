@@ -42,6 +42,12 @@ Pads keep clear of the line: a held note a semitone from what the line is
 playing is a grind rather than a passing rub, so below middle C the pad
 avoids it.  The finished score has no semitone clash anywhere below middle C.
 
+Above the horns is a **Chords staff at concert pitch**, and that is the only
+thing on it.  Chord symbols on a transposing staff read correctly but play
+back wrong - a reader applies the staff's transposition to its symbols too,
+so a concert Cm7 on the E-flat alto sounds a minor third away.  A staff with
+no transposition of its own has nothing to apply.
+
     python arrangements/fly_me_to_the_moon_horns.py -o Horns.musicxml
 """
 
@@ -210,6 +216,30 @@ def build_part(key_: str, name: str, cls, _semis: int, clef_name: str) -> stream
     return p
 
 
+def build_chord_staff() -> stream.Part:
+    """A concert-pitch staff that carries nothing but the chord symbols.
+
+    They used to sit on the alto's staff, which reads correctly on paper but
+    plays back a minor third out: a reader applies the staff's transposition
+    to its chord symbols too.  On a staff of its own, with no transposition,
+    what is written is what sounds.  It is a one-line staff with its rests
+    hidden, so nothing competes with the symbols."""
+    p = stream.Part(id="chords")
+    p.partName, p.partAbbreviation = "Chords", "Chds."
+    p.insert(0, instrument.Piano())
+    p.insert(0, clef.TrebleClef())
+    p.insert(0, meter.TimeSignature("4/4"))
+    p.insert(0, key.KeySignature(-2))
+    p.insert(0, layout.StaffLayout(staffLines=1))
+    for b in range(TOTAL_BARS):
+        m = stream.Measure(number=b + 1)
+        r = note.Rest(quarterLength=4.0)
+        r.style.hideObjectOnPrint = True
+        m.insert(0.0, r)
+        p.append(m)
+    return p
+
+
 def build_score() -> stream.Score:
     sc = stream.Score()
     sc.metadata = metadata.Metadata(
@@ -218,8 +248,9 @@ def build_score() -> stream.Score:
         composer="Bart Howard",
     )
     parts = [build_part(*spec) for spec in LAYOUT]
+    chords = build_chord_staff()
 
-    top = parts[0]
+    top = chords
     mm = tempo.MetronomeMark(number=120, referent=note.Note(type="quarter"))
     mm.placement = "above"
     top.measure(1).insert(0.0, copy.deepcopy(mm))
@@ -230,7 +261,7 @@ def build_score() -> stream.Score:
         meas = top.measure(b)
         if meas is not None and mark != "Intro":
             meas.insert(0.0, expressions.RehearsalMark(mark))
-    for prt in parts:
+    for prt in [chords] + parts:
         prt[-1].rightBarline = bar.Barline("final")
         prt.atSoundingPitch = True      # the notes above are concert pitch
         sc.insert(0, prt)
@@ -242,14 +273,16 @@ def build_score() -> stream.Score:
 
 
 def add_chord_symbols(sc: stream.Score) -> None:
-    """Concert-pitch chord symbols, added after the parts are transposed so
-    they are not transposed with them - an E-flat alto's staff would otherwise
-    label a concert Cm7 as Am7."""
+    """Chord symbols onto the Chords staff, which does not transpose, so they
+    both read and sound at concert pitch.  Added after the horns are converted
+    to written pitch so nothing can carry them along."""
     top = sc.parts[0]
-    note_ = expressions.TextExpression("chord symbols at concert pitch")
-    note_.placement = "above"
-    note_.style.fontStyle = "italic"
-    top.measure(1).insert(0.0, note_)
+    assert top.id == "chords", "the chord staff must be the top part"
+    if LAST_CHARTED_BAR < TOTAL_BARS:
+        tag = expressions.TextExpression("ending - as played")
+        tag.placement = "above"
+        tag.style.fontStyle = "italic"
+        top.measure(LAST_CHARTED_BAR + 1).insert(0.0, tag)
     for b in range(min(LAST_CHARTED_BAR, TOTAL_BARS)):
         sym = CYCLE[(b - 8) % 16]
         if b == 0 or sym != CYCLE[(b - 9) % 16]:
@@ -259,13 +292,29 @@ def add_chord_symbols(sc: stream.Score) -> None:
 
 
 def tidy_musicxml(path: str) -> None:
-    """A zero <root-alter> makes some engravers print a spurious natural, and
+    """A zero <root-alter> makes some engravers print a spurious natural,
     every <voice> must be a positive integer or MuseScore calls the file
-    corrupt."""
+    corrupt, and music21 has no way to write the chord staff's single staff
+    line, so that goes in here."""
     import xml.etree.ElementTree as ET
 
     tree = ET.parse(path)
     root = tree.getroot()
+
+    chord_ids = {sp.get("id") for sp in root.iter("score-part")
+                 if (sp.findtext("part-name") or "").strip() == "Chords"}
+    for part in root.iter("part"):
+        if part.get("id") not in chord_ids:
+            continue
+        attrs = part.find("measure/attributes")
+        if attrs is None or attrs.find("staff-details") is not None:
+            continue
+        det = ET.SubElement(attrs, "staff-details")
+        ET.SubElement(det, "staff-lines").text = "1"
+        order = ["divisions", "key", "time", "staves", "part-symbol",
+                 "instruments", "clef", "staff-details", "transpose"]
+        attrs[:] = sorted(attrs, key=lambda e: order.index(e.tag)
+                          if e.tag in order else len(order))
     for tag, sub in (("root", "root-alter"), ("bass", "bass-alter")):
         for el in root.iter(tag):
             alter = el.find(sub)
@@ -294,7 +343,7 @@ def main() -> None:
     sc.write("musicxml", fp=args.out)
     tidy_musicxml(args.out)
     n = sum(len(v) for v in PARTS.values())
-    print(f"wrote {args.out}  (6 parts, {n} notes)")
+    print(f"wrote {args.out}  (6 horn parts + chords, {n} notes)")
     if args.mxl:
         pack_mxl(args.out, args.mxl)
         print(f"wrote {args.mxl}")
