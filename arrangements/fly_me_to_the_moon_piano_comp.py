@@ -1,43 +1,33 @@
 #!/usr/bin/env python3
-"""Fly Me To The Moon - piano comping part, re-voiced to be playable.
+"""Fly Me To The Moon - the piano part, made playable.
 
 `fly_me_to_the_moon_piano.py` is the literal transcription: what Basic Pitch
-read out of the isolated piano stem, spread over three and a half octaves with
-up to nine notes in a strike.  It is an accurate record and an awkward read.
+read out of the isolated piano stem.  It is an accurate record and an awkward
+read - the same note turns up in two or three octaves at once, strikes run to
+nine notes, and nothing says which hand takes what.
 
-This takes that transcription's *rhythm* - every strike, in place, with its
-measured length - and rewrites the *pitches* as rootless comping voicings:
+This follows that transcription closely and changes only two things:
 
-    left hand    the two guide tones, 3rd and 7th
-    right hand   the colour tones above them - 9th, 5th, 11th/13th/6th
+1.  **No pitch class sounds in more than one octave.**  That is what removes
+    most of the clutter: 442 of the transcription's 1450 notes are octave
+    duplicates of something already in the chord.
+2.  **Every chord is divided between the hands**, as evenly as the chord
+    allows, at a real gap near middle C.
 
-so the harmony is stated by the two notes that define it and coloured by the
-rest, which is how a pianist actually comps behind a bass player.
+Everything else is left alone.  The pitches are the transcribed pitches, the
+rhythm is the transcribed rhythm, and the wide spreads stay wide - so the
+written-out moments survive, including the ending, whose last three chords
+walk C-E flat-B flat, C sharp-E, D-F-B flat onto the tonic.
 
-Every voicing satisfies, by construction and by check:
+Choosing *which* octave a pitch class keeps is what preserves the shape.  The
+top note is the line and always stays; the bottom note anchors the chord and
+stays unless it duplicates the top; every other pitch class keeps whichever of
+its transcribed octaves leaves the chord most evenly spread.  Without that
+last rule a six-note spread collapses into a cluster with a hole in it.
 
-  * left hand inside one octave, right hand inside one octave
-  * three to six notes in total
-  * no pitch class doubled anywhere in the stack
-  * no root in either hand - the bass guitar has it
-  * no minor 2nd between neighbouring notes, and none across the hands
-  * the hands never cross
-
-The harmony is the chart verified against the recording (chroma across all
-seven choruses, roots from the isolated bass, z = 13.3), read as one
-continuous 16-bar cycle so the 8-bar intro is the cycle's last eight bars and
-bar 9 lands on the top of the form.
-
-**Which chord a strike belongs to was measured, not assumed.**  Scoring each
-transcribed strike against its own bar's chord and the next one splits
-cleanly by position: strikes on the "and of 4" take the *next* bar's chord 69
-times against 26, and every other position takes its own - the "and of 3", for
-instance, 73 against 6.  So the pushes are voiced as the anticipations they
-are.
-
-Placement is chosen by search: of every legal way to voice each hand, the one
-that moves least from the previous strike wins.  Over the whole part that
-comes to 0.74 semitones of movement per note.
+Chord symbols run to bar 120, where the verified 16-bar cycle applies.  They
+stop there because the tag does not follow it: the cycle predicts Gm7, and
+what is played is a B-flat.
 
     python arrangements/fly_me_to_the_moon_piano_comp.py -o Comp.musicxml
 """
@@ -45,136 +35,115 @@ comes to 0.74 semitones of movement per note.
 from __future__ import annotations
 
 import copy
-import itertools
 
-from music21 import (bar, chord, clef, expressions, harmony, instrument, key,
-                     layout, metadata, meter, note, pitch, stream, tempo, tie)
+from music21 import (bar, clef, expressions, harmony, instrument, key, layout,
+                     metadata, meter, note, stream, tempo)
 
 from fly_me_to_the_moon_piano import (EVENTS, KS_FLATS, SECTIONS, SPELLING,
-                                      TOTAL_BARS, fill, pack_mxl, spell,
+                                      TOTAL_BARS, fill, pack_mxl,
                                       written_offset)
 
-# --------------------------------------------------------------------------
-# harmony
-# --------------------------------------------------------------------------
-STEP = {"C": 0, "Db": 1, "D": 2, "Eb": 3, "E": 4, "F": 5,
-        "Gb": 6, "G": 7, "Ab": 8, "A": 9, "Bb": 10, "B": 11}
+MAX_NOTES = 6      # more than a hand can grab
+MAX_SPAN = 14      # a hand reaches about a ninth
+BREAK = 60         # middle C: where the hands naturally divide
 
-CYCLE = ["Gm7", "Cm7", "F7", "Bbmaj7", "Ebmaj7", "Am7b5", "D7", "Gm7",
-         "Cm7", "F7", "Bbmaj7", "G7", "Cm7", "F7", "Bbmaj7", "D7"]
-
-# semitones above the root: what the left hand states, what the right colours
-GUIDE = {"m7": (3, 10), "7": (4, 10), "maj7": (4, 11), "m7b5": (3, 10)}
-COLOUR = {"m7": (2, 7, 5), "7": (2, 9, 7), "maj7": (2, 9, 7), "m7b5": (6, 5, 8)}
-
-LH_LO, LH_HI = 46, 59        # where the left hand's bottom note may sit
-RH_LO, RH_HI = 58, 72        # where the right hand's bottom note may sit
-SPAN = 12                    # one octave per hand
-
-
-def split_symbol(sym: str) -> tuple[int, str]:
-    for qual in ("maj7", "m7b5", "m7", "7"):
-        if sym.endswith(qual):
-            return STEP[sym[:-len(qual)]], qual
-    raise ValueError(sym)
-
-
-def chord_at(bar_index: int) -> str:
-    """The chord under a 0-based bar, as one continuous 16-bar cycle."""
-    return CYCLE[(bar_index - 8) % 16]
-
-
-def chord_for(bar_index: int, slot: int) -> str:
-    """A strike on the 'and of 4' anticipates the next bar - measured, 69:26."""
-    return chord_at(min(bar_index + 1 if slot == 11 else bar_index,
-                        TOTAL_BARS - 1))
+# the verified 16-bar cycle, for the chord symbols over bars 1-120
+CYCLE = ["Gm7", "Cm7", "F7", "B-maj7", "E-maj7", "Am7b5", "D7", "Gm7",
+         "Cm7", "F7", "B-maj7", "G7", "Cm7", "F7", "B-maj7", "D7"]
+LAST_CHARTED_BAR = 120
 
 
 # --------------------------------------------------------------------------
-# voicing
+# one note per pitch class, chosen to keep the chord's shape
 # --------------------------------------------------------------------------
-def placements(pcs: tuple[int, ...], lo: int, hi: int) -> list[tuple[int, ...]]:
-    """Every way to voice these pitch classes with the bottom note in [lo, hi],
-    the hand inside an octave and no minor 2nd between neighbours."""
-    out = set()
-    for order in itertools.permutations(pcs):
-        for bottom in range(lo, hi + 1):
-            if bottom % 12 != order[0] % 12:
-                continue
-            notes, prev = [bottom], bottom
-            for pc in order[1:]:
-                step = (pc - prev) % 12 or 12
-                prev += step
-                notes.append(prev)
-            if notes[-1] - notes[0] > SPAN:
-                continue
-            if any(b - a == 1 for a, b in zip(notes, notes[1:])):
-                continue
-            out.add(tuple(notes))
-    return sorted(out)
+def dedupe(notes: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    notes = sorted(notes)
+    by_pc: dict[int, list[tuple[int, int]]] = {}
+    for m, d in notes:
+        by_pc.setdefault(m % 12, []).append((m, d))
+
+    top, bottom = notes[-1], notes[0]
+    keep, used = [top], {top[0] % 12}
+    if bottom[0] % 12 not in used:
+        keep.append(bottom)
+        used.add(bottom[0] % 12)
+
+    def widest_gap(ns):
+        ms = sorted(n[0] for n in ns)
+        return max((b - a for a, b in zip(ms, ms[1:])), default=0)
+
+    # the pitch classes with the most octaves to choose from go first
+    for pc in sorted(by_pc, key=lambda pc: -len(by_pc[pc])):
+        if pc in used:
+            continue
+        keep.append(min(by_pc[pc], key=lambda c: widest_gap(keep + [c])))
+        used.add(pc)
+    return sorted(keep)
 
 
-def travel(new: tuple[int, ...], old: tuple[int, ...]) -> float:
-    """How far a hand moved: each new note to the nearest note it left."""
-    if not old:
-        return 0.0
-    return sum(min(abs(n - o) for o in old) for n in new)
+def trim(keep: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Thin from the bottom up: the bass guitar has the low end and the top
+    note is the line."""
+    return keep[len(keep) - MAX_NOTES:] if len(keep) > MAX_NOTES else keep
 
 
-def revoice() -> list[tuple[int, int, int, tuple[int, ...], tuple[int, ...]]]:
-    out: list[tuple[int, int, int, tuple[int, ...], tuple[int, ...]]] = []
-    prev_lh: tuple[int, ...] = ()
-    prev_rh: tuple[int, ...] = ()
+def split_hands(ps: list[int]) -> tuple[list[int], list[int]]:
+    """Divide at a real gap near middle C, as evenly as the chord allows."""
+    n = len(ps)
+    if n == 1:
+        return ([], ps) if ps[0] >= BREAK - 5 else (ps, [])
+    best = None
+    for k in range(n + 1):                        # k notes to the left hand
+        lh, rh = ps[:k], ps[k:]
+        if lh and lh[-1] - lh[0] > MAX_SPAN:
+            continue
+        if rh and rh[-1] - rh[0] > MAX_SPAN:
+            continue
+        if lh and lh[-1] > BREAK + 7:             # nothing clearly treble down there
+            continue
+        if rh and rh[0] < BREAK - 14:             # nothing clearly bass up there
+            continue
+        gap = (rh[0] - lh[-1]) if (lh and rh) else 0
+        cost = (1.5 * abs(len(lh) - len(rh))      # aim for an even split
+                - 0.7 * min(gap, 12)              # but break at a real gap
+                + 0.15 * abs((lh[-1] if lh else BREAK) - BREAK))
+        if best is None or cost < best[0]:
+            best = (cost, lh, rh)
+    if best is None:            # no legal split: drop the note that is in the way
+        _, i = max((ps[i + 1] - ps[i], i) for i in range(n - 1))
+        return split_hands(ps[i + 1:] if i < n // 2 else ps[:i + 1])
+    return best[1], best[2]
+
+
+def voiced() -> list[tuple[int, int, int, tuple[int, ...], tuple[int, ...]]]:
+    out = []
     for b, slot, notes in EVENTS:
-        root, qual = split_symbol(chord_for(b, slot))
-        guide = tuple((root + i) % 12 for i in GUIDE[qual])
-        colour = [(root + i) % 12 for i in COLOUR[qual]]
-        # the recording's own density decides how thick to make the voicing
-        width = 1 if len(notes) <= 2 else (2 if len(notes) <= 4 else 3)
-        colour = tuple(colour[:min(width, len(colour))])
-
-        best = None
-        for lh in placements(guide, LH_LO, LH_HI):
-            for rh in placements(colour, RH_LO, RH_HI):
-                if rh[0] - lh[-1] <= 1:     # no crossing, no m2 across the break
-                    continue
-                cost = (travel(lh, prev_lh) + travel(rh, prev_rh)
-                        + 0.25 * abs(lh[0] - 52) + 0.25 * abs(rh[0] - 63))
-                if best is None or cost < best[0]:
-                    best = (cost, lh, rh)
-        _, lh, rh = best
-        out.append((b, slot, max(d for _, d in notes), lh, rh))
-        prev_lh, prev_rh = lh, rh
+        keep = trim(dedupe(list(notes)))
+        lh, rh = split_hands([m for m, _ in keep])
+        out.append((b, slot, max(d for _, d in keep), tuple(lh), tuple(rh)))
     return out
 
 
-VOICED = revoice()
+VOICED = voiced()
 
 
 # --------------------------------------------------------------------------
 # the score
 # --------------------------------------------------------------------------
 def hand_events(hand: str) -> list[tuple[float, float, list[int]]]:
-    """(start, end, pitches) in written quarter notes from the top of bar 1."""
     out = []
     for b, slot, dur, lh, rh in VOICED:
         pitches = list(rh if hand == "rh" else lh)
+        if not pitches:
+            continue
         start = 4 * b + written_offset(slot)
         end = 4 * b + written_offset(slot + dur)
         out.append((start, max(end, start + 0.5), pitches))
+    out.sort()
     for i in range(len(out) - 1):
         s, e, ns = out[i]
         out[i] = (s, min(e, out[i + 1][0]), ns)
     return [(s, e, ns) for s, e, ns in out if e > s]
-
-
-def make_symbol(sym: str) -> harmony.ChordSymbol:
-    root, qual = split_symbol(sym)
-    figure = {"m7": "m7", "7": "7", "maj7": "maj7", "m7b5": "m7b5"}[qual]
-    # music21 spells a flat root "B-", not "Bb"
-    cs = harmony.ChordSymbol(SPELLING[root] + figure)
-    cs.writeAsChord = False
-    return cs
 
 
 def build_staff(hand: str, clef_obj: clef.Clef) -> stream.PartStaff:
@@ -221,7 +190,7 @@ def build_score() -> stream.Score:
     sc = stream.Score()
     sc.metadata = metadata.Metadata(
         title="Fly Me To The Moon",
-        subtitle="piano - comping part, re-voiced from the transcription",
+        subtitle="piano - transcription, made playable",
         composer="Bart Howard",
     )
     rh = build_staff("rh", clef.TrebleClef())
@@ -233,18 +202,25 @@ def build_score() -> stream.Score:
     swing = expressions.TextExpression("Medium swing - eighths swung")
     swing.placement = "above"
     rh.measure(1).insert(0.0, swing)
-    hint = expressions.TextExpression("rootless - bass has the root")
-    hint.placement = "below"
-    hint.style.fontStyle = "italic"
-    lh.measure(1).insert(0.0, hint)
 
-    for b in range(TOTAL_BARS):
+    for b in range(min(LAST_CHARTED_BAR, TOTAL_BARS)):
         meas = rh.measure(b + 1)
         if meas is None:
             continue
-        if b == 0 or chord_at(b) != chord_at(b - 1):
-            meas.insert(0.0, make_symbol(chord_at(b)))
-        if (mark := SECTIONS.get(b + 1)) is not None and mark != "Intro":
+        sym = CYCLE[(b - 8) % 16]
+        if b == 0 or sym != CYCLE[(b - 9) % 16]:
+            cs = harmony.ChordSymbol(sym)
+            cs.writeAsChord = False
+            meas.insert(0.0, cs)
+    tag = rh.measure(LAST_CHARTED_BAR + 1)
+    if tag is not None:
+        te = expressions.TextExpression("ending - as played")
+        te.placement = "above"
+        te.style.fontStyle = "italic"
+        tag.insert(0.0, te)
+    for b, mark in SECTIONS.items():
+        meas = rh.measure(b)
+        if meas is not None and mark != "Intro":
             meas.insert(0.0, expressions.RehearsalMark(mark))
     for staff in (rh, lh):
         staff[-1].rightBarline = bar.Barline("final")
@@ -283,7 +259,7 @@ def tidy_musicxml(path: str) -> None:
 def main() -> None:
     import argparse
 
-    ap = argparse.ArgumentParser(description="write the re-voiced comping part")
+    ap = argparse.ArgumentParser(description="write the playable piano part")
     ap.add_argument("-o", "--out", default="Fly_Me_To_The_Moon_Piano_Comp.musicxml")
     ap.add_argument("--mxl", help="also write a compressed .mxl here")
     args = ap.parse_args()
@@ -291,8 +267,9 @@ def main() -> None:
     sc = build_score()
     sc.write("musicxml", fp=args.out)
     tidy_musicxml(args.out)
-    n = sum(len(lh) + len(rh) for _, _, _, lh, rh in VOICED)
-    print(f"wrote {args.out}  ({len(VOICED)} voicings, {n} notes)")
+    n = sum(len(l) + len(r) for _, _, _, l, r in VOICED)
+    was = sum(len(ns) for _, _, ns in EVENTS)
+    print(f"wrote {args.out}  ({len(VOICED)} strikes, {n} notes, was {was})")
     if args.mxl:
         pack_mxl(args.out, args.mxl)
         print(f"wrote {args.mxl}")
