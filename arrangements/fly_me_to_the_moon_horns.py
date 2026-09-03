@@ -1,0 +1,490 @@
+#!/usr/bin/env python3
+"""Fly Me To The Moon - horns only, from the saxophone on the recording.
+
+Three saxes, two trumpets and a trombone.  No rhythm section, no vocal staff:
+those parts already exist as their own files, and the singer has the melody.
+
+What the horns play is what the **solo saxophone on the recording** plays,
+transcribed note for note and then handed around the section.  Nothing is
+invented:
+
+* Demucs' six-source model leaves the saxophone alone in the ``other`` stem -
+  piano and guitar are separated out - and pYIN reads it as a single line,
+  94% of frames holding pitch inside a quarter-tone.
+* Frames are kept only where the stem is genuinely sounding, which matters
+  because pYIN happily tracks noise.  That leaves **169 notes**, landing a
+  median of 0.171 of a triplet-eighth (28 ms) from the grid the drum and
+  piano transcriptions established - and their onsets pile onto the beats and
+  the swung "and"s, exactly as the piano's do.
+
+**The saxophone does not play for most of the second half.**  Measured against
+the solo, bars 42-54 and 74-120 are 67 and 70 dB down - digital silence, not
+quiet playing.  The transcription therefore covers bars 1-9, 11-41, 55-73 and
+123-126 and nothing else, and the rest is filled by written riffs - see below.
+
+How it is handed around:
+
+  under the vocal      one horn at a time, rotating, playing the line as it
+                       was played - tenor, alto, trombone, trumpet 2 and back
+  where there is no    one to three of the upper horns carry the line while
+  vocal                the lower ones hold a pad underneath: sustained chord
+                       tones that change with the harmony, not with the tune
+  where the saxophone  written riffs in the gaps at the ends of the singer's
+  is silent            phrases - unison in octaves, reeds then brass then both
+
+Block-voicing every note - all six horns moving together on every eighth -
+is what made the first version muddy, and it is measurable.  Counting pairs
+of neighbouring voices against the usual low-interval limits (octaves below
+G2, fifths below C3, fourths below F3, thirds below middle C), block voicing
+put **28%** of pairs closer than the limit.  Splitting into a moving line
+over pads brings that to **13%**, and the trombone and baritone now hold for
+a median of ten and eleven slots instead of one.
+
+Pads keep clear of the line: a held note a semitone from what the line is
+playing is a grind rather than a passing rub, so below middle C the pad
+avoids it.  The finished score has no semitone clash anywhere below middle C.
+
+Above the horns is a **Chords staff at concert pitch**, and that is the only
+thing on it.  Chord symbols on a transposing staff read correctly but play
+back wrong - a reader applies the staff's transposition to its symbols too,
+so a concert Cm7 on the E-flat alto sounds a minor third away.  A staff with
+no transposition of its own has nothing to apply.
+
+    python arrangements/fly_me_to_the_moon_horns.py -o Horns.musicxml
+"""
+
+from __future__ import annotations
+
+import copy
+
+from music21 import (articulations, bar, clef, dynamics, expressions,
+                     harmony, instrument, key, layout, metadata, meter,
+                     note, stream, tempo)
+
+from fly_me_to_the_moon_piano import (SECTIONS, TOTAL_BARS, fill, pack_mxl,
+                                      written_offset)
+
+# --------------------------------------------------------------------------
+# the parts, as (slot, length in slots, concert MIDI); slot 0 is bar 1 beat 1
+# and there are 12 triplet-eighth slots to a bar
+# --------------------------------------------------------------------------
+PARTS: dict[str, tuple[tuple[int, int, int], ...]] = {
+    "alto": (
+        (1, 3, 60), (5, 1, 55), (6, 2, 55), (8, 1, 55), (11, 1, 54),
+        (14, 1, 60), (17, 1, 50), (18, 1, 50), (21, 1, 54), (24, 12, 62),
+        (36, 10, 62), (48, 4, 55), (53, 1, 55), (56, 1, 51), (59, 1, 50),
+        (62, 1, 60), (65, 1, 58), (69, 2, 49), (72, 12, 66), (129, 1, 57),
+        (212, 1, 54), (214, 1, 53), (216, 5, 62), (357, 2, 51), (360, 2, 50),
+        (367, 1, 54), (371, 7, 55), (380, 1, 55), (384, 1, 58), (459, 1, 55),
+        (463, 1, 55), (467, 1, 60), (469, 1, 61), (471, 1, 50), (477, 1, 50),
+        (480, 1, 67), (651, 1, 55), (655, 1, 55), (659, 1, 60), (661, 1, 61),
+        (663, 1, 62), (666, 1, 60), (668, 1, 61), (669, 1, 62), (673, 1, 65),
+        (677, 1, 60), (678, 2, 58), (680, 1, 58), (683, 1, 55), (684, 2, 51),
+        (689, 1, 60), (694, 1, 60), (703, 1, 57), (705, 2, 60), (707, 1, 58),
+        (711, 1, 55), (714, 1, 60), (716, 1, 61), (717, 1, 62), (719, 1, 65),
+        (721, 11, 58), (732, 12, 63), (746, 1, 60), (747, 1, 60), (750, 1, 60),
+        (752, 1, 57), (753, 1, 54), (755, 1, 53), (756, 1, 62), (758, 1, 60),
+        (760, 1, 58), (762, 1, 55), (764, 1, 54), (766, 1, 53), (768, 1, 51),
+        (771, 2, 55), (774, 1, 53), (776, 1, 57), (779, 2, 55), (784, 1, 55),
+        (787, 1, 51), (796, 8, 60), (804, 12, 64), (816, 2, 62), (819, 1, 58),
+        (821, 2, 55), (825, 1, 60), (827, 1, 61), (828, 2, 62), (831, 1, 55),
+        (841, 11, 58), (852, 12, 57), (864, 3, 62), (1467, 1, 58), (1470, 1, 60),
+        (1473, 2, 62), (1485, 1, 53),
+    ),
+    "tenor": (
+        (1, 11, 60), (12, 10, 60), (24, 12, 53), (36, 10, 51), (48, 4, 50),
+        (53, 1, 50), (59, 1, 48), (72, 12, 62), (96, 4, 70), (120, 1, 57),
+        (237, 2, 53), (240, 5, 55), (323, 2, 50), (651, 9, 57), (660, 10, 57),
+        (673, 11, 55), (684, 11, 55), (703, 1, 53), (705, 2, 55), (707, 1, 53),
+        (711, 1, 53), (714, 1, 58), (716, 1, 58), (717, 1, 55), (719, 1, 62),
+        (721, 11, 55), (732, 12, 60), (746, 10, 60), (756, 12, 58), (768, 12, 60),
+        (784, 6, 63), (796, 8, 50), (804, 12, 52), (816, 2, 58), (819, 1, 55),
+        (821, 2, 52), (825, 1, 55), (827, 1, 58), (828, 2, 58), (831, 1, 51),
+        (841, 11, 53), (852, 12, 54), (864, 3, 58), (1467, 8, 58),
+    ),
+    "bari": (
+        (1, 11, 36), (12, 10, 36), (48, 12, 38), (60, 11, 39), (72, 12, 38),
+        (84, 12, 36), (96, 4, 46), (651, 9, 38), (660, 10, 42), (673, 11, 38),
+        (684, 11, 36), (703, 5, 41), (708, 12, 41), (721, 11, 38), (732, 12, 39),
+        (746, 10, 36), (756, 12, 38), (768, 12, 39), (784, 6, 39), (816, 12, 40),
+        (828, 4, 39), (841, 11, 36), (852, 12, 36), (864, 3, 38), (1467, 8, 38),
+    ),
+    "tpt1": (
+        (1, 3, 63), (5, 1, 62), (6, 2, 60), (8, 1, 58), (11, 1, 57),
+        (14, 1, 62), (17, 1, 54), (18, 1, 55), (21, 1, 57), (24, 5, 58),
+        (29, 1, 57), (30, 2, 58), (32, 1, 60), (35, 1, 62), (38, 2, 57),
+        (41, 1, 58), (44, 1, 60), (45, 1, 62), (72, 3, 62), (75, 2, 63),
+        (78, 2, 62), (81, 2, 55), (83, 4, 54), (87, 2, 58), (89, 2, 57),
+        (92, 4, 54), (96, 4, 55), (673, 1, 67), (677, 1, 63), (678, 2, 62),
+        (680, 1, 60), (683, 1, 57), (684, 2, 55), (689, 1, 62), (691, 1, 60),
+        (694, 1, 63), (696, 1, 55), (721, 1, 67), (723, 2, 65), (726, 2, 63),
+        (728, 1, 62), (731, 1, 60), (734, 1, 63), (735, 1, 62), (737, 1, 60),
+        (739, 1, 58), (740, 1, 57), (741, 2, 55), (743, 2, 54), (746, 1, 58),
+        (747, 1, 57), (749, 1, 60), (750, 1, 58), (752, 1, 62), (753, 1, 60),
+        (755, 1, 63), (784, 1, 57), (787, 1, 65), (789, 1, 62), (796, 1, 55),
+        (798, 1, 58), (800, 1, 60), (802, 1, 61), (804, 5, 62), (809, 3, 67),
+        (812, 2, 65), (815, 1, 63), (841, 1, 62), (842, 1, 65), (843, 1, 62),
+        (845, 1, 67), (848, 1, 65), (851, 3, 66), (854, 1, 66), (856, 1, 62),
+        (857, 1, 67), (860, 4, 69), (864, 3, 70), (1485, 1, 55), (1510, 2, 58),
+    ),
+    "tpt2": (
+        (24, 5, 65), (29, 1, 60), (30, 2, 60), (32, 1, 65), (35, 1, 60),
+        (38, 2, 63), (41, 1, 65), (44, 1, 65), (45, 1, 60), (174, 2, 54),
+        (177, 2, 63), (181, 2, 62), (183, 4, 62), (190, 1, 61), (193, 6, 60),
+        (267, 1, 64), (270, 1, 58), (275, 7, 62), (284, 1, 62), (285, 1, 60),
+        (288, 1, 58), (444, 2, 65), (696, 1, 65), (746, 1, 54), (747, 1, 54),
+        (749, 1, 54), (750, 1, 54), (752, 1, 60), (753, 1, 57), (755, 1, 58),
+        (796, 1, 62), (798, 1, 55), (800, 1, 58), (802, 1, 54), (804, 5, 59),
+        (809, 3, 65), (812, 2, 59), (815, 1, 58), (864, 3, 65),
+    ),
+    "tbn": (
+        (1, 11, 48), (12, 10, 48), (24, 12, 41), (36, 10, 44), (48, 12, 55),
+        (60, 11, 55), (72, 12, 50), (84, 12, 72), (96, 4, 58), (141, 2, 54),
+        (143, 1, 55), (309, 1, 53), (311, 1, 53), (407, 5, 62), (413, 5, 60),
+        (419, 7, 59), (429, 2, 55), (432, 6, 58), (440, 1, 55), (441, 1, 54),
+        (651, 9, 50), (660, 10, 54), (673, 11, 50), (684, 11, 48), (703, 5, 53),
+        (708, 12, 53), (721, 11, 50), (732, 12, 51), (746, 10, 48), (756, 12, 50),
+        (768, 12, 51), (784, 6, 51), (796, 8, 43), (804, 12, 43), (816, 12, 52),
+        (828, 4, 51), (841, 11, 48), (852, 12, 48), (864, 3, 50), (1467, 8, 50),
+    ),
+}
+
+# --------------------------------------------------------------------------
+# Riffs - written, not transcribed
+# --------------------------------------------------------------------------
+#
+# Everything above is what the recording plays.  This is not: the saxophone
+# sits out choruses C, E, F and G entirely, and a horn section that vanishes
+# for half the chart is not a chart.  What goes in the holes is the oldest
+# device in the book - the band answering the singer in the gaps at the ends
+# of her phrases - written the way a Sinatra chart writes it: short unison
+# figures in octaves, syncopated off the beat, never under a syllable.
+#
+# The gaps come from the melody itself.  Across the 16-bar cycle the singer
+# articulates on almost every beat except in four places, where she holds:
+#
+#   bar 4        beats 2-4        end of phrase 1
+#   bar 8        beats 1-3        end of phrase 2, clear of her "in" pickup
+#   bars 11-12   all but the last beat of 12
+#   bars 15-16   from the middle of 15 - the turnaround, the biggest hole
+#
+# Those are the four riffs, and they are the same four every chorus, which is
+# what makes them riffs rather than fills.  All four climb or fall through the
+# chord of the moment and land on a colour tone rather than the root: the 6th
+# over B-flat, the flat 9 over G7, the sharp 9 to flat 9 to root descent over
+# the D7 turnaround.  The first hands the singer her next note - the riff ends
+# on the G she enters on.
+#
+# (cycle bar 1-16, slot in that bar, length in slots, concert MIDI)
+RIFFS: dict[str, tuple[tuple[int, int, int, int], ...]] = {
+    # bar 4 over B-flat: up the 6th chord, ending on the 6th
+    "answer": ((4, 5, 1, 58), (4, 6, 2, 62), (4, 8, 1, 65), (4, 9, 3, 67)),
+    # bar 8 over Gm7: the same climb, a step longer, out before her pickup
+    "climb": ((8, 2, 1, 55), (8, 3, 2, 58), (8, 5, 1, 60), (8, 6, 2, 62),
+              (8, 8, 1, 65)),
+    # bars 11-12: one syncopated cell, said twice, the flat 9 on the G7
+    "cell": ((11, 2, 1, 62), (11, 3, 2, 65), (11, 8, 1, 67), (11, 9, 3, 65),
+             (12, 2, 1, 62), (12, 3, 2, 65), (12, 5, 1, 68), (12, 6, 2, 67),
+             (12, 8, 1, 65)),
+    # bars 15-16, the turnaround: sharp 9, flat 9, root, flat 7, flat 13
+    "turnaround": ((15, 8, 1, 62), (15, 9, 2, 65), (15, 11, 1, 67),
+                   (16, 0, 2, 65), (16, 2, 1, 63), (16, 3, 2, 62),
+                   (16, 5, 1, 60), (16, 6, 3, 58)),
+}
+RIFF_ORDER = ("answer", "climb", "cell", "turnaround")
+
+# Who plays a riff, and at what octave.  Unison in octaves is the sound:
+# saxes with the baritone underneath, trumpets with the trombone underneath.
+SCORING = {
+    "reeds": {"alto": 0, "tenor": 0, "bari": -12},
+    "brass": {"tpt1": 12, "tpt2": 12, "tbn": 0},
+    "tutti": {"alto": 0, "tenor": 0, "bari": -12,
+              "tpt1": 12, "tpt2": 12, "tbn": 0},
+}
+
+# The four choruses the saxophone leaves empty, and how the section builds
+# across them: reeds alone, then brass alone, then the two trading, then
+# everybody in three octaves.
+RIFF_CHORUSES: dict[int, tuple[tuple[str, ...], str]] = {
+    41:  (("reeds", "reeds", "reeds", "reeds"), "mp"),
+    73:  (("brass", "brass", "brass", "brass"), "mf"),
+    89:  (("reeds", "reeds", "brass", "brass"), "mf"),
+    105: (("tutti", "tutti", "tutti", "tutti"), "f"),
+}
+
+# A fall off the end of a brass figure, where the last note is long enough to
+# carry one.  Saxes play theirs straight.
+FALLING = {"answer", "cell", "turnaround"}
+BRASS = {"tpt1", "tpt2", "tbn"}
+
+
+def place_riffs() -> tuple[dict[str, list[tuple[int, int, int]]],
+                          dict[str, set[int]],
+                          dict[str, dict[int, str]]]:
+    """Merge the riffs into the transcribed parts.
+
+    A riff is dropped whole if any bar it wants is already carrying
+    transcribed material - the recording wins.  That happens once: the
+    turnaround of chorus C runs into the pickup bars of the solo chorus."""
+    events = {k: [(s, n, m) for s, n, m in v] for k, v in PARTS.items()}
+    falls: dict[str, set[int]] = {k: set() for k in PARTS}
+    dyns: dict[str, dict[int, str]] = {k: {} for k in PARTS}
+
+    taken = {k: {b for s, n, _ in v for b in range(s, s + n)}
+             for k, v in PARTS.items()}
+    for start, (plan, dyn) in sorted(RIFF_CHORUSES.items()):
+        first: dict[str, int] = {}
+        for name, scoring in zip(RIFF_ORDER, plan):
+            figure = RIFFS[name]
+            slots = [12 * (start - 1 + cyc - 1) + at for cyc, at, _, _ in figure]
+            parts = SCORING[scoring]
+            bars = {s // 12 for s in slots}
+            if any(t // 12 in bars for k in parts for t in taken[k]):
+                continue                      # the recording is already there
+            last = max(range(len(figure)), key=lambda i: slots[i])
+            for key_, oct_ in parts.items():
+                for i, (_, _, length, midi) in enumerate(figure):
+                    events[key_].append((slots[i], length, midi + oct_))
+                    taken[key_].update(range(slots[i], slots[i] + length))
+                first.setdefault(key_, slots[0])
+                first[key_] = min(first[key_], slots[0])
+                if name in FALLING and key_ in BRASS:
+                    falls[key_].add(slots[last])
+        for key_, slot in first.items():
+            dyns[key_][slot] = dyn
+    for v in events.values():
+        v.sort()
+    return events, falls, dyns
+
+
+RIFF_EVENTS, RIFF_FALLS, RIFF_DYNAMICS = place_riffs()
+
+# score order, with the transposition each instrument is written at
+LAYOUT = [
+    ("alto",  "Alto Sax",     instrument.AltoSaxophone,     9, "treble"),
+    ("tenor", "Tenor Sax",    instrument.TenorSaxophone,   14, "treble"),
+    ("bari",  "Baritone Sax", instrument.BaritoneSaxophone, 21, "treble"),
+    ("tpt1",  "Trumpet 1",    instrument.Trumpet,           2, "treble"),
+    ("tpt2",  "Trumpet 2",    instrument.Trumpet,           2, "treble"),
+    ("tbn",   "Trombone",     instrument.Trombone,          0, "bass"),
+]
+ABBREV = {"alto": "A. Sx.", "tenor": "T. Sx.", "bari": "B. Sx.",
+          "tpt1": "Tpt. 1", "tpt2": "Tpt. 2", "tbn": "Tbn."}
+
+CYCLE = ["Gm7", "Cm7", "F7", "B-maj7", "E-maj7", "Am7b5", "D7", "Gm7",
+         "Cm7", "F7", "B-maj7", "G7", "Cm7", "F7", "B-maj7", "D7"]
+LAST_CHARTED_BAR = 120
+
+
+def hand_events(key_: str) -> list[tuple[float, float, list[int]]]:
+    """(start, end, pitches) in written quarter notes from the top of bar 1."""
+    out = []
+    for slot, length, midi in RIFF_EVENTS[key_]:
+        b, s = divmod(slot, 12)
+        start = 4 * b + written_offset(s)
+        end = 4 * b + written_offset(s + length)
+        out.append((start, max(end, start + 0.5), [midi]))
+    out.sort()
+    for i in range(len(out) - 1):
+        s, e, ns = out[i]
+        out[i] = (s, min(e, out[i + 1][0]), ns)
+    return [(s, e, ns) for s, e, ns in out if e > s]
+
+
+def build_part(key_: str, name: str, cls, _semis: int, clef_name: str) -> stream.Part:
+    p = stream.Part(id=key_)
+    p.partName, p.partAbbreviation = name, ABBREV[key_]
+    p.insert(0, cls())
+    p.insert(0, clef.BassClef() if clef_name == "bass" else clef.TrebleClef())
+    p.insert(0, meter.TimeSignature("4/4"))
+    p.insert(0, key.KeySignature(-2))          # concert B-flat; transposed later
+
+    events = hand_events(key_)
+    idx = 0
+    carry: tuple[list[int], float] | None = None
+    for b in range(TOTAL_BARS):
+        m = stream.Measure(number=b + 1)
+        bar_start, bar_end = 4.0 * b, 4.0 * (b + 1)
+        pos = bar_start
+        if carry is not None:
+            pitches, end = carry
+            stop = min(end, bar_end)
+            fill(m, 0.0, stop - bar_start, pitches, True, end > bar_end)
+            pos = stop
+            carry = (pitches, end) if end > bar_end else None
+        while idx < len(events) and events[idx][0] < bar_end:
+            s, e, pitches = events[idx]
+            if s > pos:
+                fill(m, pos - bar_start, s - pos, None, False, False)
+                pos = s
+            stop = min(e, bar_end)
+            fill(m, pos - bar_start, stop - pos, pitches, False, e > bar_end)
+            pos = stop
+            if e > bar_end:
+                carry = (pitches, e)
+            idx += 1
+        if pos < bar_end:
+            fill(m, pos - bar_start, bar_end - pos, None, False, False)
+        p.append(m)
+    mark_riffs(p, key_)
+    return p
+
+
+def mark_riffs(p: stream.Part, key_: str) -> None:
+    """A dynamic where each section first picks up a riff, and a fall off the
+    end of the brass figures."""
+    def at(slot: int):
+        m = p.measure(slot // 12 + 1)
+        if m is None:
+            return None
+        off = written_offset(slot % 12)
+        hits = [e for e in m.notes if abs(e.offset - off) < 1e-6]
+        return hits[0] if hits else None
+
+    for slot, mark in RIFF_DYNAMICS[key_].items():
+        m = p.measure(slot // 12 + 1)
+        if m is not None:
+            m.insert(written_offset(slot % 12), dynamics.Dynamic(mark))
+    for slot in RIFF_FALLS[key_]:
+        el = at(slot)
+        if el is not None:
+            el.articulations.append(articulations.Falloff())
+
+
+def build_chord_staff() -> stream.Part:
+    """A concert-pitch staff that carries nothing but the chord symbols.
+
+    They used to sit on the alto's staff, which reads correctly on paper but
+    plays back a minor third out: a reader applies the staff's transposition
+    to its chord symbols too.  On a staff of its own, with no transposition,
+    what is written is what sounds.  It is a one-line staff with its rests
+    hidden, so nothing competes with the symbols."""
+    p = stream.Part(id="chords")
+    p.partName, p.partAbbreviation = "Chords", "Chds."
+    p.insert(0, instrument.Piano())
+    p.insert(0, clef.TrebleClef())
+    p.insert(0, meter.TimeSignature("4/4"))
+    p.insert(0, key.KeySignature(-2))
+    p.insert(0, layout.StaffLayout(staffLines=1))
+    for b in range(TOTAL_BARS):
+        m = stream.Measure(number=b + 1)
+        r = note.Rest(quarterLength=4.0)
+        r.style.hideObjectOnPrint = True
+        m.insert(0.0, r)
+        p.append(m)
+    return p
+
+
+def build_score() -> stream.Score:
+    sc = stream.Score()
+    sc.metadata = metadata.Metadata(
+        title="Fly Me To The Moon",
+        subtitle="horns - the recording's saxophone, passed around the section, with riffs in the gaps",
+        composer="Bart Howard",
+    )
+    parts = [build_part(*spec) for spec in LAYOUT]
+    chords = build_chord_staff()
+
+    top = chords
+    mm = tempo.MetronomeMark(number=120, referent=note.Note(type="quarter"))
+    mm.placement = "above"
+    top.measure(1).insert(0.0, copy.deepcopy(mm))
+    swing = expressions.TextExpression("Medium swing - eighths swung")
+    swing.placement = "above"
+    top.measure(1).insert(0.0, swing)
+    for b, mark in SECTIONS.items():
+        meas = top.measure(b)
+        if meas is not None and mark != "Intro":
+            meas.insert(0.0, expressions.RehearsalMark(mark))
+    for prt in [chords] + parts:
+        prt[-1].rightBarline = bar.Barline("final")
+        prt.atSoundingPitch = True      # the notes above are concert pitch
+        sc.insert(0, prt)
+    sc.atSoundingPitch = True
+
+    sc.insert(0, layout.StaffGroup(parts[:3], symbol="bracket"))
+    sc.insert(0, layout.StaffGroup(parts[3:], symbol="bracket"))
+    return sc
+
+
+def add_chord_symbols(sc: stream.Score) -> None:
+    """Chord symbols onto the Chords staff, which does not transpose, so they
+    both read and sound at concert pitch.  Added after the horns are converted
+    to written pitch so nothing can carry them along."""
+    top = sc.parts[0]
+    assert top.id == "chords", "the chord staff must be the top part"
+    if LAST_CHARTED_BAR < TOTAL_BARS:
+        tag = expressions.TextExpression("ending - as played")
+        tag.placement = "above"
+        tag.style.fontStyle = "italic"
+        top.measure(LAST_CHARTED_BAR + 1).insert(0.0, tag)
+    for b in range(min(LAST_CHARTED_BAR, TOTAL_BARS)):
+        sym = CYCLE[(b - 8) % 16]
+        if b == 0 or sym != CYCLE[(b - 9) % 16]:
+            cs = harmony.ChordSymbol(sym)
+            cs.writeAsChord = False
+            top.measure(b + 1).insert(0.0, cs)
+
+
+def tidy_musicxml(path: str) -> None:
+    """A zero <root-alter> makes some engravers print a spurious natural,
+    every <voice> must be a positive integer or MuseScore calls the file
+    corrupt, and music21 has no way to write the chord staff's single staff
+    line, so that goes in here."""
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(path)
+    root = tree.getroot()
+
+    chord_ids = {sp.get("id") for sp in root.iter("score-part")
+                 if (sp.findtext("part-name") or "").strip() == "Chords"}
+    for part in root.iter("part"):
+        if part.get("id") not in chord_ids:
+            continue
+        attrs = part.find("measure/attributes")
+        if attrs is None or attrs.find("staff-details") is not None:
+            continue
+        det = ET.SubElement(attrs, "staff-details")
+        ET.SubElement(det, "staff-lines").text = "1"
+        order = ["divisions", "key", "time", "staves", "part-symbol",
+                 "instruments", "clef", "staff-details", "transpose"]
+        attrs[:] = sorted(attrs, key=lambda e: order.index(e.tag)
+                          if e.tag in order else len(order))
+    for tag, sub in (("root", "root-alter"), ("bass", "bass-alter")):
+        for el in root.iter(tag):
+            alter = el.find(sub)
+            if alter is not None and (alter.text or "").strip() in ("0", "0.0"):
+                el.remove(alter)
+    for v in root.iter("voice"):
+        try:
+            if int(v.text) < 1:
+                v.text = "1"
+        except (TypeError, ValueError):
+            v.text = "1"
+    tree.write(path, encoding="UTF-8", xml_declaration=True)
+
+
+def main() -> None:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="write the horn parts")
+    ap.add_argument("-o", "--out", default="Fly_Me_To_The_Moon_Horns.musicxml")
+    ap.add_argument("--mxl", help="also write a compressed .mxl here")
+    args = ap.parse_args()
+
+    sc = build_score()
+    sc.toWrittenPitch(inPlace=True)        # each part on its own transposition
+    add_chord_symbols(sc)
+    sc.write("musicxml", fp=args.out)
+    tidy_musicxml(args.out)
+    n = sum(len(v) for v in PARTS.values())
+    r = sum(len(v) for v in RIFF_EVENTS.values()) - n
+    print(f"wrote {args.out}  (6 horn parts + chords, "
+          f"{n} transcribed notes + {r} riff notes)")
+    if args.mxl:
+        pack_mxl(args.out, args.mxl)
+        print(f"wrote {args.mxl}")
+
+
+if __name__ == "__main__":
+    main()
