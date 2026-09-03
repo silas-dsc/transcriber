@@ -51,6 +51,47 @@ Durations run to the next event in the same hand, up to two bars. The pedal
 holds, and a line of eighth rests between every chord is neither what was
 played nor anything anyone wants to read.
 
+## Sustain written as repetition — found by comparison, then fixed
+
+A hand-written reference for the first two bars showed the left hand as two
+half notes per bar. The transcription had **five events per bar**, and bar 1
+was a single sustained G struck four times. The right hand had the same fault:
+F♯5 repeated five times where the reference moves.
+
+This was a real bug, not a judgement call, and the audio settles it. Taking a
+36-bin CQT and reading the energy *at each pitch* just after each detected
+onset against just before it, a genuine re-strike shows a clear rise. After
+the opening attack of bar 1 (F♯5 rising by a factor of 7.9) every upper-voice
+ratio in bars 1–2 sits between **0.6 and 1.2** — flat. Nothing is being
+struck again; the strings are ringing and decaying.
+
+Thresholding on that ratio does not work: across the whole piece, first
+statements rise by a median 1.84 and repeats by 1.25, and the distributions
+overlap so badly that removing 43% of repeats also discards 19% of genuine
+notes. A soft re-strike on a ringing string barely moves the energy.
+
+What works is structural. An event whose pitches add nothing to the event
+before it has not struck anything — it is the sustain being re-detected — so
+it is merged into it. That takes the left hand from a median of five events
+per bar to **two**, matching the reference, and the score from 1332 notes to
+925 without discarding a single genuine attack.
+
+## What is still wrong, and why
+
+**The right-hand melodic line is under-recovered.** The reference shows a
+moving line of eighths; this score writes held notes there. The line is not
+missing from the pipeline, it is missing from the stem: the test above finds
+no fresh attacks in the upper register to recover. Pedalled piano smears note
+boundaries, and source separation is imperfect at exactly the register where
+a sung melody and a played one overlap, so some of that line has most likely
+gone to the vocal stem.
+
+Held notes are the honest answer to that — writing repeated F♯5s would be
+inventing attacks the audio does not contain — but it does lose the tune.
+Fixing it properly needs a piano-specific transcription model rather than a
+general polyphonic one, or cleaner separation, or correction by hand. It is
+not something a better choice of threshold recovers.
+
 ## The one thing that could not be measured
 
 **Which beat is beat 1.** Five independent tests — bass-root positions modulo
