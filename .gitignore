@@ -27,3 +27,6 @@ separated/
 
 # OS
 .DS_Store
+
+# Compressed MusicXML is generated alongside the plain .musicxml
+*.mxl
