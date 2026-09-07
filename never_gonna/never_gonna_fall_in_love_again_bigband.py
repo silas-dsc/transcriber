@@ -391,24 +391,117 @@ def bass_for(bar: int) -> list[tuple[float, float, int]]:
     return [(pat[0], 1.5, r), (pat[1], 1.5, fifth), (pat[2], 1.0, r)]
 
 
-def piano_voicing(sym: str) -> tuple[list[int], list[int]]:
-    """A rootless right hand over a single left-hand root.
+# Rootless voicings, intervals in semitones above the root.  These are the
+# shapes a pianist in the Bill Evans line actually puts under a singer: the
+# root is left to the bass, minor and dominant chords are voiced from the
+# third or the seventh with the 9th on top, and the plain major chords are
+# taken as 6/9 rather than major-7 so the leading tone never fights the tune.
+ROOTLESS: dict[str, tuple[int, ...]] = {
+    "Am":    (3, 7, 10, 14),      # b3 5 b7 9
+    "Am/G":  (3, 7, 10, 14),
+    "D7/F#": (4, 9, 10, 14),      # 3 13 b7 9
+    "F":     (4, 7, 9, 14),       # 3 5 6 9
+    "E7":    (4, 7, 10, 13),      # 3 5 b7 b9  - the b9 belongs in A minor
+    "C":     (4, 7, 9, 14),       # 6/9
+    "G":     (4, 7, 9, 14),       # 6/9
+    "G/B":   (4, 7, 9, 14),
+    "G7":    (4, 9, 10, 14),      # 3 13 b7 9
+}
 
-    The bass already states the root, so the right hand takes the remaining
-    chord tones stacked in the octave above B3 - close position, three or four
-    notes, in the register a pianist actually comps in behind a singer.  The
-    left hand puts one root underneath and stays out of the bass's way.
+
+def evans_voicing(sym: str, prev_top: int | None) -> list[int]:
+    """A four-note rootless voicing, inverted to follow the previous one.
+
+    Every inversion that fits inside a tenth is tried and the one whose top
+    note moves least from the last chord wins, so the top voice walks rather
+    than jumps and the inner voices come along with it.
     """
-    root, tones, bass_pc, _fig = SPEC[sym]
-    if not tones:
-        return [], []
+    if sym not in ROOTLESS:
+        return []
+    root = SPEC[sym][0]
+    pcs = sorted({(root + i) % 12 for i in ROOTLESS[sym]})
     floor = _ps("B3")
-    upper = [t for t in tones if t != root]
-    if len(upper) < 3:                      # keep the voicing from going thin
-        upper = list(tones)
-    rh = sorted({pc + 12 * ((floor - pc + 11) // 12) for pc in upper})
-    lh = [nearest(bass_pc, _ps("A2"))]
-    return rh, lh
+    best: tuple[int, list[int]] | None = None
+    for start in range(len(pcs)):
+        seq: list[int] = []
+        for k in range(len(pcs)):
+            pc = pcs[(start + k) % len(pcs)]
+            if not seq:
+                p = pc + 12 * ((floor - pc + 11) // 12)
+            else:
+                p = pc + 12 * ((seq[-1] - pc) // 12 + 1)
+            seq.append(p)
+        if seq[-1] - seq[0] > 16 or seq[-1] > _ps("D5"):
+            continue
+        cost = abs(seq[-1] - (prev_top if prev_top is not None else _ps("A4")))
+        if best is None or cost < best[0]:
+            best = (cost, seq)
+    return best[1] if best else []
+
+
+def left_hand(sym: str, variant: int) -> list[int]:
+    """Root, or a two-note shell.  Sometimes nothing - the bass has the root."""
+    if sym not in SPEC or not SPEC[sym][1]:
+        return []
+    root, tones, bass_pc, _fig = SPEC[sym][:4]
+    low = nearest(bass_pc, _ps("A2"))
+    if variant == 0:
+        return [low]
+    if variant == 1:                       # root and seventh, the usual shell
+        seventh = [t for t in tones if (t - root) % 12 in (10, 11)]
+        if seventh:
+            return sorted({low, nearest(seventh[0], low + 8)})
+        return [low]
+    if variant == 2:
+        return sorted({low, nearest((root + 7) % 12, low + 7)})
+    return []                              # lay out
+
+
+# Comping rhythms as (offset, quarterLength).  The tune's own 3+3+2 is in
+# here, but so are anticipations, late entries and bars of nothing: comping
+# the same figure for 124 bars is what made the part sound mechanical.
+COMP = [
+    [(0.0, 1.5), (1.5, 1.5), (3.0, 1.0)],
+    [(0.0, 2.5), (2.5, 1.5)],
+    [(0.5, 1.0), (1.5, 1.5), (3.0, 1.0)],
+    [(0.0, 4.0)],
+    [(1.5, 1.5), (3.0, 1.0)],
+    [(0.0, 1.0), (1.5, 0.5), (2.5, 1.5)],
+    [(0.0, 1.5), (2.5, 1.5)],
+    [(0.0, 2.0), (2.0, 1.0), (3.5, 0.5)],
+    [],
+    [(2.5, 1.5)],
+]
+# Which rhythms a section draws on, and how often the piano lays out.  The
+# verses are sparser because the singer is exposed there.
+COMP_PLAN = [
+    (1, 8, (3, 0, 3, 6)),
+    (9, 17, (0, 6, 1, 0)),
+    (18, 32, (4, 8, 6, 9, 1, 8, 0, 4)),
+    (33, 48, (0, 7, 2, 0, 5, 1, 0, 6)),
+    (49, 64, (4, 8, 6, 9, 1, 8, 0, 4)),
+    (65, 80, (0, 5, 2, 7, 0, 1, 5, 0)),
+    (81, 85, (3,)),
+    (86, 100, (1, 6, 0, 4, 2, 0, 6, 1)),
+    (101, 116, (0, 5, 7, 0, 2, 1, 5, 0)),
+    (117, 124, (3, 6, 3, 1, 3, 6, 3, 3)),
+]
+
+
+def comp_rhythm(bar: int) -> list[tuple[float, float]]:
+    pat = (0,)
+    for lo, hi, choices in COMP_PLAN:
+        if lo <= bar <= hi:
+            pat = choices
+            break
+    rows = COMP[pat[(bar - 1) % len(pat)]]
+    total = bar_len(bar)
+    out = []
+    for off, ql in rows:
+        if off >= total:
+            continue
+        out.append((off, min(ql, total - off)))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -416,21 +509,31 @@ def piano_voicing(sym: str) -> tuple[list[int], list[int]]:
 # ---------------------------------------------------------------------------
 # Where each piece of the kit sits on the percussion staff, and its notehead.
 KIT = {
-    "crash":  ("A5", "x"),
-    "hh":     ("G5", "x"),
-    "ride":   ("F5", "x"),
-    "bell":   ("F5", "diamond"),
-    "tom_hi": ("E5", None),
-    "tom_md": ("D5", None),
-    "snare":  ("C5", None),
-    "xstick": ("C5", "x"),        # rim click - the bolero sound
-    "tom_lo": ("A4", None),
-    "bd":     ("F4", None),
-    "hhped":  ("D4", "x"),
+    # piece: (staff position, notehead, General MIDI drum number)
+    # Standard kit only - kick, snare, toms, hi-hat, ride, crash.
+    "crash":  ("A5", "x", 49),         # crash cymbal
+    "hh":     ("G5", "x", 42),         # closed hi-hat, stick
+    "hho":    ("G5", "circle-x", 46),  # open hi-hat
+    "ride":   ("F5", "x", 51),         # ride cymbal
+    "bell":   ("F5", "diamond", 53),   # ride bell
+    "tom_hi": ("E5", None, 48),        # high tom
+    "tom_md": ("D5", None, 47),        # mid tom
+    "snare":  ("C5", None, 38),        # snare, struck
+    "xstick": ("C5", "x", 37),         # snare, side stick
+    "tom_lo": ("A4", None, 43),        # floor tom
+    "bd":     ("F4", None, 36),        # bass drum
+    "hhped":  ("D4", "x", 44),         # hi-hat, foot
 }
-DRUM_MIDI = {
-    "crash": 49, "hh": 42, "ride": 51, "bell": 53, "tom_hi": 48, "tom_md": 47,
-    "snare": 38, "xstick": 37, "tom_lo": 43, "bd": 36, "hhped": 44,
+# staff position + notehead identifies a piece uniquely, which is how the
+# exported notes are matched back to their kit piece when the drum part list
+# is written (music21 emits neither per-note instruments nor MIDI numbers).
+BY_LOOK = {(pos, head): (name, midi) for name, (pos, head, midi) in KIT.items()}
+# General MIDI percussion names, so a reader maps each line to the right piece
+GM_NAME = {
+    36: "Bass Drum 1", 37: "Side Stick", 38: "Acoustic Snare",
+    42: "Closed Hi Hat", 43: "High Floor Tom", 44: "Pedal Hi-Hat",
+    46: "Open Hi-Hat", 47: "Low-Mid Tom", 48: "Hi-Mid Tom",
+    49: "Crash Cymbal 1", 51: "Ride Cymbal 1", 53: "Ride Bell",
 }
 
 # Grooves are (offset, [pieces], quarterLength).  Every one of them is one bar
@@ -574,7 +677,10 @@ def add(plan: dict, bar: int, slot: str, events: list) -> None:
 
 def pad_bar(plan: dict, bar: int, slots: tuple[str, ...], lead_target: int,
             *, triad: bool = False, artic: str | None = None) -> int:
-    """Sustained block voicing, re-struck when the chord changes mid-bar."""
+    """Sustained block voicing, re-struck when the chord changes mid-bar.
+
+    ``lead_target`` is where the top voice wants to be; the nearest chord tone
+    to it is taken, so passing a moving target gives the pad a shape."""
     last = lead_target
     for off, sym in changes(bar):
         if sym == "NC":
@@ -607,20 +713,33 @@ def hit_bar(plan: dict, bar: int, slots: tuple[str, ...], lead_target: int,
 
 
 def line_bar(plan: dict, bar: int, slots: tuple[str, ...],
-             line: list[tuple[float, float, str]]) -> None:
-    """Harmonise a written lead across ``slots`` (top voice takes the line)."""
+             line: list[tuple[float, float, str]], *, short: bool = False,
+             artic: str | None = None) -> None:
+    """Harmonise a written lead across ``slots`` (top voice takes the line).
+
+    With ``short`` the same pitches come out as clipped accented punches - the
+    section figure a big band plays on the 3+3+2 - instead of held notes.
+    Punches take their contour from the written lead for a reason: choosing
+    the nearest chord tone to the previous note instead, which is the obvious
+    thing to do, minimises motion so completely that the lead trumpet ends up
+    repeating one note for a whole chorus.
+    """
     for off, ql, name in line:
         if bar == SHORT_BAR and off >= 2.0:
             continue
         ql = min(ql, bar_len(bar) - off)
+        if short:
+            ql = min(ql, 0.5)
         if ql <= 0:
             continue
         sym = chord_at(bar, off)
         if sym == "NC":
             continue
         lead = _ps(name)
-        for slot, p in section_voicing(lead, sym, slots).items():
-            add(plan, bar, slot, [_mk(off, ql, p, None)])
+        voi = section_voicing(lead, sym, slots, triad=short)
+        for slot, p in voi.items():
+            add(plan, bar, slot, [_mk(off, ql, p, artic)])
+
 
 # ---------------------------------------------------------------------------
 # The arrangement
@@ -655,7 +774,7 @@ def build_horn_plan() -> dict[int, dict[str, list]]:
         lead = pad_bar(plan, bar, REEDS, lead)
 
     # -- bar 17: brass set up the entry
-    hit_bar(plan, 17, BRASS, _ps("B4"))
+    line_bar(plan, 17, BRASS, VERSE_LEAD[7], short=True, artic="accent")
 
     # -- Verse 1 (18-32): trombone and baritone hold the harmony underneath,
     #    alto and tenor answer only where the singer has stopped.
@@ -670,12 +789,15 @@ def build_horn_plan() -> dict[int, dict[str, list]]:
             line_bar(plan, bar, ("alto", "tenor"), VERSE_LEAD[pos])
 
     # -- Chorus 1 (33-48): brass punch the 3+3+2, reeds sustain over the top
-    lead = _ps("D5")
     for bar in range(33, 49):
-        lead = hit_bar(plan, bar, BRASS, lead)
-    lead = _ps("E5")
+        pos = chorus_pos(bar)
+        if pos is not None:
+            line_bar(plan, bar, BRASS, CHORUS_LEAD[pos], short=True,
+                     artic="accent")
     for bar in range(33, 49):
-        lead = pad_bar(plan, bar, REEDS, lead)
+        pos = chorus_pos(bar)
+        if pos is not None:
+            pad_bar(plan, bar, REEDS, _ps(CHORUS_LEAD[pos][0][2]) + 5)
 
     # -- bar 49: reeds lead back into the verse
     line_bar(plan, 49, REEDS, [(2.0, 1.0, "C5"), (3.0, 1.0, "B4")])
@@ -693,9 +815,13 @@ def build_horn_plan() -> dict[int, dict[str, list]]:
             line_bar(plan, bar, ("tpt1", "alto"), VERSE_LEAD[pos])
 
     # -- Chorus 2 (65-80): the whole band on the accents
-    lead = _ps("E5")
     for bar in range(65, 81):
-        lead = hit_bar(plan, bar, ALL_HORNS, lead)
+        pos = chorus_pos(bar)
+        if pos is not None:
+            line_bar(plan, bar, BRASS, CHORUS_LEAD[pos], short=True,
+                     artic="accent")
+            line_bar(plan, bar, REEDS, CHORUS_LEAD[pos], short=True,
+                     artic="accent")
 
     # -- bar 81 one tutti chord, then the band drops out for the break
     pad_bar(plan, 81, ALL_HORNS, _ps("E5"), triad=True, artic="accent")
@@ -707,15 +833,15 @@ def build_horn_plan() -> dict[int, dict[str, list]]:
         if pos is not None:
             line_bar(plan, bar, REEDS, VERSE_LEAD[pos])
     for bar in (92, 100):
-        hit_bar(plan, bar, BRASS, _ps("B4"))
+        line_bar(plan, bar, BRASS, VERSE_LEAD[6], short=True, artic="accent")
 
     # -- Chorus 3 (101-116): shout chorus.  Brass carry the lead, reeds under.
     for bar in range(101, 117):
         pos = chorus_pos(bar)
         if pos is None:
             continue
-        line_bar(plan, bar, BRASS, CHORUS_LEAD[pos])
-        line_bar(plan, bar, REEDS, [(o, q, n) for o, q, n in CHORUS_LEAD[pos]])
+        line_bar(plan, bar, BRASS, CHORUS_LEAD[pos], artic="accent")
+        line_bar(plan, bar, REEDS, CHORUS_LEAD[pos])
 
     # -- Outro (117-124): sustained, thinning out, one last chord
     lead = _ps("E5")
@@ -995,38 +1121,86 @@ def build_horn(slot: str, name: str, abbrev: str, instr, treble: bool,
     return p
 
 
+LH_VARIANT = (0, 1, 0, 2, 1, 0, 3, 1)
+# a short right-hand line at the end of a section, instead of another chord
+PIANO_FILLS = {16, 32, 48, 64, 80, 100, 116}
+
+
+def piano_fill(sym: str, top: int | None) -> list[tuple[float, float, int]]:
+    """Four descending eighths off the top of the voicing, into the next bar."""
+    voi = evans_voicing(sym, top)
+    if len(voi) < 4:
+        return []
+    line = sorted(voi, reverse=True)
+    return [(2.0 + i * 0.5, 0.5, line[i]) for i in range(4)]
+
+
 def build_piano() -> tuple[stream.PartStaff, stream.PartStaff, layout.StaffGroup]:
-    rh = stream.PartStaff(); rh.id = "PianoRH"
-    lh = stream.PartStaff(); lh.id = "PianoLH"
-    ins = instrument.Piano(); ins.partName = "Piano"; ins.partAbbreviation = "Pno."
-    rh.insert(0, ins); rh.insert(0, clef.TrebleClef())
-    lh.insert(0, instrument.Piano()); lh.insert(0, clef.BassClef())
-    rh.partName = "Piano"; rh.partAbbreviation = "Pno."
+    rh = stream.PartStaff()
+    rh.id = "PianoRH"
+    lh = stream.PartStaff()
+    lh.id = "PianoLH"
+    ins = instrument.Piano()
+    ins.partName = "Piano"
+    ins.partAbbreviation = "Pno."
+    rh.insert(0, ins)
+    rh.insert(0, clef.TrebleClef())
+    lh.insert(0, instrument.Piano())
+    lh.insert(0, clef.BassClef())
+    rh.partName = "Piano"
+    rh.partAbbreviation = "Pno."
+    top: int | None = None
     for bar in range(1, TOTAL_BARS + 1):
         mr = new_measure(bar, first=(bar == 1))
         ml = new_measure(bar, first=(bar == 1))
         add_symbols(mr, bar)
-        pat = tresillo(bar)
-        for off, sym in changes(bar):
+        chs = changes(bar)
+        total = bar_len(bar)
+
+        # right hand
+        if bar in PIANO_FILLS:
+            sym = chord_at(bar, 2.0)
+            for off, ql, midi in piano_fill(sym, top):
+                n = _note(midi, ql)
+                n.pitch = _respell(n.pitch)
+                mr.insert(off, n)
+            first = chs[0][1]
+            voi = evans_voicing(first, top)
+            if voi:
+                c = chord.Chord([_note(x, 2.0) for x in voi])
+                c.quarterLength = 2.0
+                c.pitches = tuple(_respell(x) for x in c.pitches)
+                mr.insert(0.0, c)
+                top = voi[-1]
+        else:
+            for off, ql in comp_rhythm(bar):
+                sym = chord_at(bar, off)
+                if sym == "NC":
+                    continue
+                nxt = [o for o, _s in chs if o > off]
+                ql = min(ql, (nxt[0] if nxt else total) - off)
+                voi = evans_voicing(sym, top)
+                if ql <= 0 or not voi:
+                    continue
+                c = chord.Chord([_note(x, ql) for x in voi])
+                c.quarterLength = ql
+                c.pitches = tuple(_respell(x) for x in c.pitches)
+                mr.insert(off, c)
+                top = voi[-1]
+
+        # left hand: one shell per chord, sustained, and sometimes tacet
+        var = LH_VARIANT[(bar - 1) % len(LH_VARIANT)]
+        for i, (off, sym) in enumerate(chs):
             if sym == "NC":
                 continue
-            upper, lower = piano_voicing(sym)
-            end = bar_len(bar) if off == changes(bar)[-1][0] else bar_len(bar) / 2
-            hits = [o for o in pat if off <= o < end] or [off]
-            for i, o in enumerate(hits):
-                ql = min((hits[i + 1] if i + 1 < len(hits) else end) - o, end - o)
-                if ql <= 0:
-                    continue
-                if upper:
-                    c = chord.Chord([_note(x, ql) for x in upper])
-                    c.quarterLength = ql
-                    c.pitches = tuple(_respell(x) for x in c.pitches)
-                    mr.insert(o, c)
-                if lower and i == 0:
-                    c2 = chord.Chord([_note(x, end - off) for x in lower])
-                    c2.quarterLength = end - off
-                    c2.pitches = tuple(_respell(x) for x in c2.pitches)
-                    ml.insert(off, c2)
+            end = chs[i + 1][0] if i + 1 < len(chs) else total
+            notes = left_hand(sym, var)
+            if not notes or end - off <= 0:
+                continue
+            c2 = chord.Chord([_note(x, end - off) for x in notes])
+            c2.quarterLength = end - off
+            c2.pitches = tuple(_respell(x) for x in c2.pitches)
+            ml.insert(off, c2)
         rh.append(finish(mr, bar))
         lh.append(finish(ml, bar))
     grp = layout.StaffGroup([rh, lh], name="Piano", abbreviation="Pno.",
@@ -1068,7 +1242,7 @@ def build_drums() -> stream.Part:
     p.id = "Drums"
     p.partName = "Drums"
     p.partAbbreviation = "Dr."
-    ins = instrument.BassDrum()
+    ins = instrument.Percussion()
     ins.partName = "Drums"
     ins.partAbbreviation = "Dr."
     p.insert(0, ins)
@@ -1079,26 +1253,34 @@ def build_drums() -> stream.Part:
         total = bar_len(bar)
         for voice_no, up in ((1, True), (2, False)):
             at: dict[float, list[str]] = {}
-            for off, pieces, _ql in evs:
+            dur: dict[float, float] = {}
+            for off, pieces, ql in evs:
                 sel = [x for x in pieces if (x in DRUM_UP) == up]
                 if not sel or off >= total:
                     continue
                 for x in sel:
                     if x not in at.setdefault(off, []):
                         at[off].append(x)
+                dur[off] = min(dur.get(off, ql), ql)
             if not at:
                 continue
             v = stream.Voice()
             v.id = str(voice_no)
             offs = sorted(at)
+            cursor = 0.0
             for i, off in enumerate(offs):
-                end = offs[i + 1] if i + 1 < len(offs) else total
-                ql = end - off
+                nxt = offs[i + 1] if i + 1 < len(offs) else total
+                # a drum is struck, not sustained: keep the written value the
+                # groove asks for and fill the rest of the gap with rests,
+                # rather than stretching a kick into a tied half note
+                ql = min(dur.get(off, 0.5), nxt - off)
                 if ql <= 0:
                     continue
+                if off - cursor > 1e-9:
+                    _rest_run(v, cursor, off - cursor)
                 objs = []
                 for piece in at[off]:
-                    disp, head = KIT[piece]
+                    disp, head, _midi = KIT[piece]
                     u = note.Unpitched(displayName=disp)
                     u.storedInstrument = instrument.UnpitchedPercussion()
                     if head:
@@ -1108,8 +1290,9 @@ def build_drums() -> stream.Part:
                 ob.quarterLength = ql
                 ob.stemDirection = "up" if up else "down"
                 v.insert(off, ob)
-            if offs and offs[0] > 1e-9:
-                _rest_run(v, 0.0, offs[0])
+                cursor = off + ql
+            if total - cursor > 1e-9:
+                _rest_run(v, cursor, total - cursor)
             m.insert(0.0, v)
         if not len(m.voices):
             r = note.Rest(quarterLength=total)
@@ -1186,6 +1369,76 @@ def metadata_block():
     return m
 
 
+def _write_drumset(root: ET.Element) -> None:
+    """Give the drum part a real drum set in the part list.
+
+    music21 exports the staff position of each unpitched note correctly but
+    declares only one instrument for the whole part, so a reader maps every
+    note to that one sound and collapses the staff onto a single line.  Here
+    the part gets one score-instrument per kit piece actually used, and every
+    note gets an instrument reference, which is what makes the kick, snare,
+    hi-hat and cymbals land on their own lines and play back as themselves.
+    """
+    pid = None
+    for sp in root.findall("part-list/score-part"):
+        nm = sp.find("part-name")
+        if nm is not None and (nm.text or "") == "Drums":
+            pid = sp.get("id")
+            break
+    if pid is None:
+        return
+    part = next((p for p in root.findall("part") if p.get("id") == pid), None)
+    if part is None:
+        return
+
+    def look(n: ET.Element) -> tuple[str, int] | None:
+        up = n.find("unpitched")
+        if up is None:
+            return None
+        step = up.findtext("display-step")
+        octv = up.findtext("display-octave")
+        head = n.findtext("notehead")
+        return BY_LOOK.get((f"{step}{octv}", head))
+
+    used: dict[int, str] = {}
+    for n in part.iter("note"):
+        hit = look(n)
+        if hit:
+            used[hit[1]] = hit[0]
+
+    sp = next(p for p in root.findall("part-list/score-part") if p.get("id") == pid)
+    for child in list(sp):
+        if child.tag in ("score-instrument", "midi-instrument"):
+            sp.remove(child)
+    ids = {}
+    for midi in sorted(used):
+        iid = f"{pid}-D{midi}"
+        ids[midi] = iid
+        si = ET.SubElement(sp, "score-instrument", {"id": iid})
+        ET.SubElement(si, "instrument-name").text = GM_NAME.get(midi, used[midi])
+    for midi in sorted(used):
+        mi = ET.SubElement(sp, "midi-instrument", {"id": ids[midi]})
+        ET.SubElement(mi, "midi-channel").text = "10"
+        # MusicXML numbers unpitched sounds 1-128 against MIDI 0-127
+        ET.SubElement(mi, "midi-unpitched").text = str(midi + 1)
+        ET.SubElement(mi, "volume").text = "80"
+        ET.SubElement(mi, "pan").text = "0"
+
+    for n in part.iter("note"):
+        hit = look(n)
+        if not hit:
+            continue
+        for old in n.findall("instrument"):
+            n.remove(old)
+        ref = ET.Element("instrument", {"id": ids[hit[1]]})
+        kids = list(n)
+        at = 0
+        for i, k in enumerate(kids):
+            if k.tag in ("duration", "tie"):
+                at = i + 1
+        n.insert(at, ref)
+
+
 def tidy_musicxml(path: str) -> None:
     """Post-export fixes music21 will not make itself.
 
@@ -1198,6 +1451,7 @@ def tidy_musicxml(path: str) -> None:
              "clef", "staff-details", "transpose", "directive", "measure-style"]
     tree = ET.parse(path)
     root = tree.getroot()
+    _write_drumset(root)
     for tag in ("root", "bass"):
         for el in root.iter(tag):
             for alt in list(el):

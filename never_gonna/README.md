@@ -144,11 +144,45 @@ bolero and that is Cole's ground.
 * **Chorus 3 (101–116)** — shout chorus, all six horns on the accents.
 * **Outro (117–124)** — sustained, thinning, last chord.
 
-Drums are deliberately plain: one groove per section, backbeat always in the
-same place, texture changing *between* sections and not within them — rim
+**Drums** are deliberately plain: one groove per section, backbeat always in
+the same place, texture changing *between* sections and not within them — rim
 click and hi-hat under the verses, ride and snare in the choruses, ride bell
-in the last one. Fills are half-bar and land only in the last bar of a
-section (plus one full bar out of the break).
+in the last one. Fills are half-bar and land only in the last bar of a section
+(plus one full bar out of the break). Standard kit only — kick, snare, toms,
+hi-hat, ride, crash — no auxiliary or Latin percussion, even though the
+recording's own percussion is a bolero.
+
+The part is written as a proper drum set, which takes some work in MusicXML:
+music21 exports each note's staff position correctly but declares only one
+instrument for the whole part, so a reader maps every note to that single
+sound and collapses the staff onto one line. `_write_drumset` rebuilds the
+part list with one score-instrument per kit piece actually used, with its
+General MIDI number, and puts an instrument reference on every note. Kick,
+snare, hi-hat and cymbals then sit on their own lines and play back as
+themselves. Drums are also notated in two voices — stems up for hands, stems
+down for feet — and struck rather than sustained: each note keeps the value
+the groove asks for and the remainder of the bar is filled with rests, so a
+kick reads as a quarter and an eighth rather than a tied half note.
+
+**Piano** is comping, not a feature, but it is not the same bar 124 times.
+Voicings are rootless in the Bill Evans sense: the bass keeps the root, minor
+and dominant chords are voiced from the third or the seventh with the 9th on
+top, plain major chords are taken as 6/9 rather than major-7 so the leading
+tone never fights the tune, and E7 gets its flat 9, which is what belongs in
+A minor. Every inversion that fits inside a tenth is tried and the one whose
+top note moves least from the previous chord wins, so the top voice walks
+instead of jumping. The left hand alternates between a bare root, a root-and-
+seventh shell, a root and fifth, and nothing at all — letting the bass carry
+it on its own is part of the vocabulary.
+
+Rhythm is drawn from a library of ten comping figures rather than one. The
+tune's own 3+3+2 is in there, along with anticipations, late entries,
+sustained bars and bars of silence; each section draws on its own set, and the
+verses are sparser because the singer is exposed. A short descending
+right-hand line replaces the chord in the last bar of each section. The
+result is 12 distinct rhythms across the chart, between 0 and 5 attacks per
+bar, with the piano laying out entirely in 12 bars and the left hand resting
+in 19.
 
 ## Playability
 
