@@ -326,23 +326,51 @@ VOX = [
     (120,4,1,48), (121,3,1,52), (121,5,2,48), (121,7,1,50)
 ]
 
-# The record's own instrumental lines, lifted from the accordion/cello stem
-# in the windows where the singer is not singing, and handed to a horn.
+# The recording's own instrumental lines, given to a horn wherever the
+# singer is not singing, with the part changing from phrase to phrase.
+# Most come from the acoustic guitar, read off a CQT restricted to the
+# melodic register above D4: pitch tracking cannot follow a strummed
+# instrument (pYIN finds a confident f0 in 0.3% of its frames) but the top
+# of the CQT does, at 94% in-key against 58% for chance.  A CQT reading
+# jumps octaves, so each phrase is folded to within a sixth of its own
+# median.  A few lines come from the accordion where the guitar has
+# nothing, and the percussion break is left clear.
 # (phrase, bar, eighth in bar, length in eighths, concert MIDI, part)
 MELODY = [
-    (0,7,2,1,64,"tenor"), (0,7,4,1,69,"tenor"), (0,7,6,1,69,"tenor"), (0,7,7,1,57,"tenor"),
-    (0,8,0,1,69,"tenor"), (0,8,3,1,69,"tenor"), (0,9,0,1,64,"tenor"), (0,9,3,1,72,"tenor"),
-    (1,10,1,1,69,"tpt1"), (1,10,2,1,71,"tpt1"), (2,15,1,1,64,"alto"), (2,15,4,1,60,"alto"),
-    (2,15,6,3,57,"alto"), (2,16,1,2,69,"alto"), (2,16,4,2,57,"alto"), (2,17,0,3,76,"alto"),
-    (2,17,4,2,76,"alto"), (2,17,6,4,64,"alto"), (3,24,2,2,71,"tbn"), (3,24,6,1,72,"tbn"),
-    (3,24,7,1,71,"tbn"), (3,25,4,1,74,"tbn"), (3,25,5,1,57,"tbn"), (3,26,0,1,74,"tbn"),
-    (3,26,1,2,71,"tbn"), (4,38,6,1,59,"tpt2"), (4,38,7,1,60,"tpt2"), (5,49,1,1,60,"tenor"),
-    (5,49,3,6,72,"tenor"), (5,50,2,2,72,"tenor"), (6,52,5,1,74,"tpt1"), (6,52,6,2,72,"tpt1"),
-    (7,80,7,1,55,"alto"), (7,81,1,2,60,"alto"), (7,81,5,4,60,"alto"), (8,85,5,1,72,"tbn"),
-    (8,85,6,2,72,"tbn"), (8,86,0,3,72,"tbn"), (8,86,4,1,72,"tbn"), (8,86,5,1,71,"tbn"),
-    (8,86,6,1,72,"tbn"), (9,91,7,1,76,"tpt2"), (9,92,0,2,72,"tpt2"), (9,92,4,1,72,"tpt2"),
-    (9,92,5,1,69,"tpt2"), (9,92,7,1,72,"tpt2"), (9,93,1,2,72,"tpt2"), (10,97,2,1,60,"tenor"),
-    (10,97,4,2,64,"tenor"), (10,98,0,2,60,"tenor")
+    (0,1,0,1,64,"tenor"), (0,1,1,1,67,"tenor"), (0,1,2,1,69,"tenor"), (0,1,3,2,72,"tenor"),
+    (0,1,5,1,76,"tenor"), (0,1,6,1,72,"tenor"), (0,1,7,1,69,"tenor"), (0,2,0,1,67,"tenor"),
+    (0,2,1,4,69,"tenor"), (0,2,5,1,62,"tenor"), (0,2,7,1,62,"tenor"), (0,3,0,1,64,"tenor"),
+    (0,3,1,1,67,"tenor"), (0,3,2,1,69,"tenor"), (0,3,3,3,72,"tenor"), (0,3,6,1,74,"tenor"),
+    (0,3,7,1,72,"tenor"), (0,4,0,1,74,"tenor"), (0,4,1,2,72,"tenor"), (0,4,3,3,69,"tenor"),
+    (0,4,6,3,62,"tenor"), (1,5,1,2,67,"tpt1"), (1,5,3,1,72,"tpt1"), (1,5,5,1,69,"tpt1"),
+    (1,5,6,1,62,"tpt1"), (1,5,7,1,69,"tpt1"), (1,6,0,3,62,"tpt1"), (1,6,4,2,69,"tpt1"),
+    (1,6,6,1,71,"tpt1"), (1,6,7,1,69,"tpt1"), (1,7,2,3,69,"tpt1"), (1,7,5,3,71,"tpt1"),
+    (1,8,0,1,76,"tpt1"), (1,8,1,1,72,"tpt1"), (1,8,2,1,71,"tpt1"), (1,8,3,1,72,"tpt1"),
+    (1,8,4,5,71,"tpt1"), (2,9,1,1,69,"alto"), (2,9,2,6,64,"alto"), (2,10,1,2,64,"alto"),
+    (2,10,3,1,62,"alto"), (2,10,4,2,69,"alto"), (2,10,6,2,62,"alto"), (2,11,0,2,69,"alto"),
+    (2,11,2,4,62,"alto"), (2,11,6,1,72,"alto"), (2,11,7,1,74,"alto"), (3,14,1,1,65,"tbn"),
+    (3,14,2,1,62,"tbn"), (3,14,3,3,64,"tbn"), (3,15,0,2,64,"tbn"), (3,15,2,1,62,"tbn"),
+    (3,15,3,3,64,"tbn"), (3,15,6,1,67,"tbn"), (3,15,7,2,71,"tbn"), (3,16,1,2,64,"tbn"),
+    (3,16,4,1,69,"tbn"), (3,16,7,3,62,"tbn"), (3,17,2,1,71,"tbn"), (3,17,3,7,64,"tbn"),
+    (4,24,2,1,69,"tpt2"), (4,24,3,1,62,"tpt2"), (4,24,4,3,71,"tpt2"), (4,24,7,1,64,"tpt2"),
+    (4,25,0,1,69,"tpt2"), (4,25,1,1,67,"tpt2"), (4,25,2,2,69,"tpt2"), (4,25,5,1,69,"tpt2"),
+    (4,25,6,1,71,"tpt2"), (4,26,0,2,64,"tpt2"), (4,26,2,1,67,"tpt2"), (5,38,6,1,59,"tpt2"),
+    (5,38,7,1,60,"tpt2"), (6,49,1,1,60,"tbn"), (6,49,3,6,72,"tbn"), (6,50,2,2,72,"tbn"),
+    (7,52,5,1,74,"tenor"), (7,52,6,2,72,"tenor"), (8,56,3,3,64,"tenor"), (8,56,6,1,62,"tenor"),
+    (8,56,7,1,64,"tenor"), (8,57,0,1,65,"tenor"), (8,57,1,3,67,"tenor"), (8,57,4,3,64,"tenor"),
+    (8,57,7,1,71,"tenor"), (8,58,0,1,69,"tenor"), (8,58,1,7,64,"tenor"), (9,81,0,1,67,"alto"),
+    (9,81,1,3,64,"alto"), (9,81,4,2,67,"alto"), (10,89,0,1,62,"tbn"), (10,89,1,1,67,"tbn"),
+    (10,89,2,3,64,"tbn"), (10,89,5,1,60,"tbn"), (10,89,6,6,62,"tbn"), (10,90,4,1,76,"tbn"),
+    (10,90,5,1,69,"tbn"), (10,90,6,1,62,"tbn"), (10,90,7,1,67,"tbn"), (10,91,0,1,69,"tbn"),
+    (10,91,1,1,67,"tbn"), (10,91,2,1,69,"tbn"), (10,91,3,1,67,"tbn"), (10,91,4,2,64,"tbn"),
+    (10,91,6,1,62,"tbn"), (10,91,7,3,69,"tbn"), (10,92,2,5,71,"tbn"), (10,92,7,1,69,"tbn"),
+    (11,93,0,1,71,"tpt2"), (11,93,1,3,69,"tpt2"), (11,94,0,5,71,"tpt2"), (11,94,5,5,64,"tpt2"),
+    (11,95,2,2,69,"tpt2"), (11,95,4,1,62,"tpt2"), (11,95,5,1,71,"tpt2"), (11,95,6,1,72,"tpt2"),
+    (11,95,7,1,74,"tpt2"), (12,97,2,4,69,"alto"), (12,97,6,1,64,"alto"), (12,97,7,1,69,"alto"),
+    (12,98,0,2,62,"alto"), (13,99,5,2,64,"tenor"), (13,100,0,1,62,"tenor"),
+    (13,100,2,6,64,"tenor"), (13,101,1,1,67,"tenor"), (13,101,2,1,64,"tenor"),
+    (13,101,3,2,67,"tenor"), (13,101,5,4,64,"tenor"), (14,109,0,1,71,"tpt1"),
+    (14,109,1,2,67,"tpt1"), (14,109,3,1,64,"tpt1"), (14,109,5,2,64,"tpt1")
 ]
 
 # ---------------------------------------------------------------------------
@@ -946,15 +974,15 @@ def add_melodic_fills(plan: dict[int, dict[str, list]]) -> set[tuple[int, str]]:
     for pid, rows in sorted(phrases.items()):
         slot = rows[0][4]
         lo, hi = CONCERT_RANGE[slot]
-        shift = 0
-        for _ in range(4):                       # move the phrase as one block
-            ps = [m + shift for _b, _o, _l, m, _s in rows]
-            if min(ps) < lo:
-                shift += 12
-            elif max(ps) > hi:
-                shift -= 12
-            else:
-                break
+        # Pick the octave that leaves fewest notes outside the range, rather
+        # than nudging up and down until a counter runs out - a phrase wider
+        # than the instrument makes that oscillate, and the per-note fit that
+        # followed then flattened the line.
+        src = [m for _b, _o, _l, m, _s in rows]
+        mid = (lo + hi) / 2
+        shift = min(range(-36, 37, 12),
+                    key=lambda d: (sum(1 for m in src if not lo <= m + d <= hi),
+                                   abs(sum(src) / len(src) + d - mid)))
         # clear this part right across the phrase, so the line is exposed
         # rather than sounding against whatever it was padding with
         for bar in range(rows[0][0], rows[-1][0] + 1):

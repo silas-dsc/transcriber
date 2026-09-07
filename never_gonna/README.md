@@ -172,67 +172,42 @@ bolero and that is Cole's ground.
 * **Verse 3 (86–100)** — instrumental on the recording, so the reeds take it
   as a soli, with the brass answering at the end of each phrase.
 
-**Melodic fills.** Where the singer stops and the accordion or cello carries a
-line, that line goes to a horn rather than being replaced by an invented
-figure, and the instrument changes from phrase to phrase — tenor, first
-trumpet, alto, trombone, second trumpet, and round again. Eleven phrases, 50
-notes. The part taking a phrase is cleared right across it so the line is
-exposed instead of sounding against its own pad.
+**Melodic fills.** Where the singer stops and the band carries a line, that
+line goes to a horn rather than being replaced by an invented figure, and the
+instrument changes from phrase to phrase — tenor, first trumpet, alto,
+trombone, second trumpet, and round again. Fifteen phrases, 132 notes, all
+five of those horns used. The part taking a phrase is cleared right across it
+so the line is exposed instead of sounding against its own pad. The percussion
+break is left clear.
 
-Getting those lines out took two attempts. Tracking the highest strong bin of
-a CQT looked plausible and was worthless: run on the *vocal* stem, where a
-melody certainly exists, it returned only 50–56% in-key notes against a 58%
-chance rate, so the chromatic wandering it produced on the instrumental stems
-said nothing at all. pYIN on the accordion/cello stem is sound — its notes are
-87–92% in-key — so the extraction threshold was loosened until the in-key rate
-started falling toward chance, which is what fixes it at 145 notes. One phrase
-that came back entirely out-of-key was dropped rather than cleaned up, and
-isolated octave slips inside a phrase are pulled back to their neighbours.
+Most of the material is the **acoustic guitar**, and getting at it took three
+attempts:
 
-The guitar is not a source for this: it strums, and pYIN finds a confident
-pitch in only 1.0% of its frames against 7.3% for the accordion and cello.
-* **Chorus 3 (101–116)** — shout chorus, all six horns on the accents.
-* **Outro (117–124)** — sustained, thinning, last chord.
+1. pYIN across the guitar's full range finds a confident pitch in 1.0% of
+   frames, which is what led to the wrong conclusion that the guitar only
+   strums. It does strum — the low strings dominate and there is no single f0
+   to track. Restricting pYIN to the melodic register makes it *worse* (0.3%),
+   because the problem is polyphony, not range.
+2. Tracking the highest strong bin of a CQT over the whole register produced
+   chromatic nonsense. A control settled it: run on the *vocal* stem, where a
+   melody certainly exists, it returned 50–56% in-key notes against a 58%
+   chance rate. The method was broken, so its output said nothing.
+3. The CQT restricted to the melodic register above D4 works, at **94% in-key
+   against 58% for chance**. A CQT reading jumps octaves, so each phrase is
+   then folded to within a sixth of its own median.
 
-**Drums** are deliberately plain: one groove per section, backbeat always in
-the same place, texture changing *between* sections and not within them — rim
-click and hi-hat under the verses, ride and snare in the choruses, ride bell
-in the last one. Fills are half-bar and land only in the last bar of a section
-(plus one full bar out of the break). Standard kit only — kick, snare, toms,
-hi-hat, ride, crash — no auxiliary or Latin percussion, even though the
-recording's own percussion is a bolero.
+A few lines come from the accordion and cello, in the four bars where the
+guitar has nothing.
 
-The part is written as a proper drum set, which takes some work in MusicXML:
-music21 exports each note's staff position correctly but declares only one
-instrument for the whole part, so a reader maps every note to that single
-sound and collapses the staff onto one line. `_write_drumset` rebuilds the
-part list with one score-instrument per kit piece actually used, with its
-General MIDI number, and puts an instrument reference on every note. Kick,
-snare, hi-hat and cymbals then sit on their own lines and play back as
-themselves. Drums are also notated in two voices — stems up for hands, stems
-down for feet — and struck rather than sustained: each note keeps the value
-the groove asks for and the remainder of the bar is filled with rests, so a
-kick reads as a quarter and an eighth rather than a tied half note.
-
-**Piano** is comping, not a feature, but it is not the same bar 124 times.
-Voicings are rootless in the Bill Evans sense: the bass keeps the root, minor
-and dominant chords are voiced from the third or the seventh with the 9th on
-top, plain major chords are taken as 6/9 rather than major-7 so the leading
-tone never fights the tune, and E7 gets its flat 9, which is what belongs in
-A minor. Every inversion that fits inside a tenth is tried and the one whose
-top note moves least from the previous chord wins, so the top voice walks
-instead of jumping. The left hand alternates between a bare root, a root-and-
-seventh shell, a root and fifth, and nothing at all — letting the bass carry
-it on its own is part of the vocabulary.
-
-Rhythm is drawn from a library of ten comping figures rather than one. The
-tune's own 3+3+2 is in there, along with anticipations, late entries,
-sustained bars and bars of silence; each section draws on its own set, and the
-verses are sparser because the singer is exposed. A short descending
-right-hand line replaces the chord in the last bar of each section. The
-result is 12 distinct rhythms across the chart, between 0 and 5 attacks per
-bar, with the piano laying out entirely in 12 bars and the left hand resting
-in 19.
+One thing that did **not** work, and is worth recording: searching for a known
+motif by template-matching its pitches. The figure that opens the piece is
+E–G–A–C, which is simply the A minor pentatonic, so the matcher scored the key
+rather than the motif — chance 0.398, and the preference for one metrical
+position over another was flat (0.383–0.406 across all eight eighths). Reading
+the pitches at its top-scoring "hits" showed only the genuine one. The motif's
+occurrences were confirmed by looking at the extracted line bar by bar
+instead: it opens bars 1 and 3, and does not recur — elsewhere the guitar
+holds sustained chord tones.
 
 ## Playability
 
