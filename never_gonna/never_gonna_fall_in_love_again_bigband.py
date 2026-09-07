@@ -96,6 +96,20 @@ CHART: list[list[str]] = [
     ['C'], ['C'], ['C'], ['C'],   # bars 117-120
     ['C'], ['C'], ['C'], ['C'],   # bars 121-124
 ]
+
+# Corrections after checking the chart against the recording bar by bar.  The
+# chart above is built from the two 8-bar templates; where the band departs
+# from the template the template was winning, which is what these fix.
+CORRECTIONS: dict[int, list[str]] = {
+    8:  ["Am"],           # was E7 - the phrase ends on the tonic
+    15: ["Am"],           # was E7 - likewise
+    16: ["F", "E7"],      # was a whole bar of F; the F lasts two beats
+    25: ["F7", "E7"],     # was E7 - the turnaround is two chords
+    57: ["F7", "E7"],     # was E7 - likewise
+}
+for _bar, _cell in CORRECTIONS.items():
+    CHART[_bar - 1] = _cell
+
 assert len(CHART) == TOTAL_BARS
 
 # ---------------------------------------------------------------------------
@@ -112,6 +126,7 @@ SPEC: dict[str, tuple[int, tuple[int, ...], int, str]] = {
     "Am/G":  (9, (9, 0, 4, 7), 7, "Am/G"),
     "D7/F#": (2, (2, 6, 9, 0), 6, "D7/F#"),
     "F":     (5, (5, 9, 0, 2), 5, "F"),
+    "F7":    (5, (5, 9, 0, 3), 5, "F7"),
     "E7":    (4, (4, 8, 11, 2), 4, "E7"),
     "C":     (0, (0, 4, 7, 9), 0, "C"),
     "G":     (7, (7, 11, 2, 4), 7, "G"),
@@ -121,6 +136,7 @@ SPEC: dict[str, tuple[int, tuple[int, ...], int, str]] = {
 }
 # the plain triad, for figures that should not sound the 7th
 TRIAD = {"Am": (9, 0, 4), "Am/G": (9, 0, 4), "D7/F#": (2, 6, 9), "F": (5, 9, 0),
+         "F7": (5, 9, 0),
          "E7": (4, 8, 11), "C": (0, 4, 7), "G": (7, 11, 2), "G/B": (7, 11, 2),
          "G7": (7, 11, 2), "NC": ()}
 
@@ -310,6 +326,25 @@ VOX = [
     (120,4,1,48), (121,3,1,52), (121,5,2,48), (121,7,1,50)
 ]
 
+# The record's own instrumental lines, lifted from the accordion/cello stem
+# in the windows where the singer is not singing, and handed to a horn.
+# (phrase, bar, eighth in bar, length in eighths, concert MIDI, part)
+MELODY = [
+    (0,7,2,1,64,"tenor"), (0,7,4,1,69,"tenor"), (0,7,6,1,69,"tenor"), (0,7,7,1,57,"tenor"),
+    (0,8,0,1,69,"tenor"), (0,8,3,1,69,"tenor"), (0,9,0,1,64,"tenor"), (0,9,3,1,72,"tenor"),
+    (1,10,1,1,69,"tpt1"), (1,10,2,1,71,"tpt1"), (2,15,1,1,64,"alto"), (2,15,4,1,60,"alto"),
+    (2,15,6,3,57,"alto"), (2,16,1,2,69,"alto"), (2,16,4,2,57,"alto"), (2,17,0,3,76,"alto"),
+    (2,17,4,2,76,"alto"), (2,17,6,4,64,"alto"), (3,24,2,2,71,"tbn"), (3,24,6,1,72,"tbn"),
+    (3,24,7,1,71,"tbn"), (3,25,4,1,74,"tbn"), (3,25,5,1,57,"tbn"), (3,26,0,1,74,"tbn"),
+    (3,26,1,2,71,"tbn"), (4,38,6,1,59,"tpt2"), (4,38,7,1,60,"tpt2"), (5,49,1,1,60,"tenor"),
+    (5,49,3,6,72,"tenor"), (5,50,2,2,72,"tenor"), (6,52,5,1,74,"tpt1"), (6,52,6,2,72,"tpt1"),
+    (7,80,7,1,55,"alto"), (7,81,1,2,60,"alto"), (7,81,5,4,60,"alto"), (8,85,5,1,72,"tbn"),
+    (8,85,6,2,72,"tbn"), (8,86,0,3,72,"tbn"), (8,86,4,1,72,"tbn"), (8,86,5,1,71,"tbn"),
+    (8,86,6,1,72,"tbn"), (9,91,7,1,76,"tpt2"), (9,92,0,2,72,"tpt2"), (9,92,4,1,72,"tpt2"),
+    (9,92,5,1,69,"tpt2"), (9,92,7,1,72,"tpt2"), (9,93,1,2,72,"tpt2"), (10,97,2,1,60,"tenor"),
+    (10,97,4,2,64,"tenor"), (10,98,0,2,60,"tenor")
+]
+
 # ---------------------------------------------------------------------------
 # Rhythm section
 # ---------------------------------------------------------------------------
@@ -401,6 +436,7 @@ ROOTLESS: dict[str, tuple[int, ...]] = {
     "Am/G":  (3, 7, 10, 14),
     "D7/F#": (4, 9, 10, 14),      # 3 13 b7 9
     "F":     (4, 7, 9, 14),       # 3 5 6 9
+    "F7":    (4, 9, 10, 14),      # 3 13 b7 9
     "E7":    (4, 7, 10, 13),      # 3 5 b7 b9  - the b9 belongs in A minor
     "C":     (4, 7, 9, 14),       # 6/9
     "G":     (4, 7, 9, 14),       # 6/9
@@ -850,6 +886,8 @@ def build_horn_plan() -> dict[int, dict[str, list]]:
     pad_bar(plan, 123, ALL_HORNS, lead, triad=True)
     pad_bar(plan, 124, ALL_HORNS, lead, triad=True)
     smooth_octaves(plan)
+    # last, so the smoothing pass cannot reshape a transcribed line
+    add_melodic_fills(plan)
     return plan
 
 
@@ -880,6 +918,63 @@ def smooth_octaves(plan: dict[int, dict[str, list]]) -> None:
                     cands, key=lambda p: (abs(p - prev), abs(p - midi)))
                 evs[i] = (off, ql, best, artic)
                 prev = best
+
+
+def add_melodic_fills(plan: dict[int, dict[str, list]]) -> set[tuple[int, str]]:
+    """Give the recording's instrumental lines to a horn, one phrase at a time.
+
+    Wherever the singer stops and the accordion or cello carries a line, that
+    line goes to a member of the band rather than being replaced by an
+    invented figure, and the instrument changes from phrase to phrase.  Each
+    phrase is octave-shifted as a block so its shape survives; the parts that
+    were padding underneath are cleared out of the way so the line is exposed.
+    """
+    phrases: dict[int, list] = {}
+    for pid, bar, off, ln, midi, slot in MELODY:
+        phrases.setdefault(pid, []).append([bar, off, ln, midi, slot])
+    # the tracker occasionally reports one note an octave out; inside a phrase
+    # that shows up as a note stranded more than an octave from both its
+    # neighbours, so pull it back before anything else is decided
+    for rows in phrases.values():
+        for i in range(1, len(rows) - 1):
+            prv, nxt = rows[i - 1][3], rows[i + 1][3]
+            m = rows[i][3]
+            if abs(m - prv) > 12 and abs(m - nxt) > 12:
+                rows[i][3] = min((m - 12, m, m + 12),
+                                 key=lambda q: abs(q - prv) + abs(q - nxt))
+    taken: set[tuple[int, str]] = set()
+    for pid, rows in sorted(phrases.items()):
+        slot = rows[0][4]
+        lo, hi = CONCERT_RANGE[slot]
+        shift = 0
+        for _ in range(4):                       # move the phrase as one block
+            ps = [m + shift for _b, _o, _l, m, _s in rows]
+            if min(ps) < lo:
+                shift += 12
+            elif max(ps) > hi:
+                shift -= 12
+            else:
+                break
+        # clear this part right across the phrase, so the line is exposed
+        # rather than sounding against whatever it was padding with
+        for bar in range(rows[0][0], rows[-1][0] + 1):
+            if bar in plan and slot in plan[bar]:
+                plan[bar][slot] = []
+        for bar, off, ln, midi, _s in rows:
+            start = off * 0.5
+            room = bar_len(bar) - start
+            if room <= 0:
+                continue
+            ql = min(max(ln, 1) * 0.5, room)
+            add(plan, bar, slot, [_mk(start, ql, fit(midi + shift, slot), None)])
+            taken.add((bar, slot))
+    return taken
+
+
+# where a horn takes one of those lines, say so in the part
+FILL_LABEL = {}
+for _pid, _bar, _off, _ln, _m, _slot in MELODY:
+    FILL_LABEL.setdefault(_pid, (_bar, _slot))
 
 
 HORN_DYNAMICS = {9: "mp", 17: "mf", 18: "pp", 33: "mf", 50: "pp", 65: "f",

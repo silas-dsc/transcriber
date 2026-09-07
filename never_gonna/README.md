@@ -82,6 +82,36 @@ Two chords were decided rather than simply read off:
   simpler thing to hand a rhythm section, but this is a choice, not a
   measurement.
 
+### Corrections after review
+
+The chart was first built by fitting the two 8-bar templates to the whole
+form. That was the wrong last step: where the band departs from the template,
+the template won and the measurement lost. Five bars were corrected, three
+reported by ear and two found by re-checking every bar against the audio:
+
+| Bar | Was | Is | How |
+|---|---|---|---|
+| 8 | E7 | Am | measured — Am on beats 1–3 |
+| 15 | E7 | Am | reported; measurement agreed (Am from beat 2) |
+| 16 | F (4 beats) | F ⋅ E7 | reported; F measures as exactly 2 beats |
+| 25 | E7 | F7 ⋅ E7 | measured — F on beats 1–2, margin 0.34 |
+| 57 | E7 | F7 ⋅ E7 | reported; the raw measurement already said F ⋅ E7 |
+
+Bars 25 and 57 are the same position in the form and measure almost
+identically. The flat 7th is faint — E♭ reads 0.41 against 0.27 on the plain F
+bars, about 1.5× — so F7 rests more on the report than on the measurement.
+
+Every bar was then re-tested at beat resolution against the whole vocabulary.
+Two things that looked like errors are not:
+
+* **The Am/G bars.** The detector prefers "C/G" there, but Am7/G and C6/G are
+  the same four notes — a labelling choice, not a disagreement. A (0.622)
+  sits well above C (0.456), which is what makes Am/G the better name.
+* **The second half of the chorus's fifth bar** (37, 45, 69, 77, 105, 113),
+  where "G" scored up to 0.44 better than the written Am/G. That is the bass
+  note inflating its own pitch class: in a bar that really is G, B measures
+  0.398; in these bars B is 0.209 while A is 0.260 against 0.161. Am/G stands.
+
 Everywhere else the symbols are kept plain (`Am`, `F`, `C`, `G`) as you asked.
 Where a voicing carries an extra tone, it is one the chroma actually shows —
 the 7th on Am, the 6th on C, F and G. `Fmaj7` was specifically *not* used:
@@ -141,6 +171,26 @@ bolero and that is Cole's ground.
 * **Percussion break (81–85)** — one tutti chord on 81, then the drums alone.
 * **Verse 3 (86–100)** — instrumental on the recording, so the reeds take it
   as a soli, with the brass answering at the end of each phrase.
+
+**Melodic fills.** Where the singer stops and the accordion or cello carries a
+line, that line goes to a horn rather than being replaced by an invented
+figure, and the instrument changes from phrase to phrase — tenor, first
+trumpet, alto, trombone, second trumpet, and round again. Eleven phrases, 50
+notes. The part taking a phrase is cleared right across it so the line is
+exposed instead of sounding against its own pad.
+
+Getting those lines out took two attempts. Tracking the highest strong bin of
+a CQT looked plausible and was worthless: run on the *vocal* stem, where a
+melody certainly exists, it returned only 50–56% in-key notes against a 58%
+chance rate, so the chromatic wandering it produced on the instrumental stems
+said nothing at all. pYIN on the accordion/cello stem is sound — its notes are
+87–92% in-key — so the extraction threshold was loosened until the in-key rate
+started falling toward chance, which is what fixes it at 145 notes. One phrase
+that came back entirely out-of-key was dropped rather than cleaned up, and
+isolated octave slips inside a phrase are pulled back to their neighbours.
+
+The guitar is not a source for this: it strums, and pYIN finds a confident
+pitch in only 1.0% of its frames against 7.3% for the accordion and cello.
 * **Chorus 3 (101–116)** — shout chorus, all six horns on the accents.
 * **Outro (117–124)** — sustained, thinning, last chord.
 
